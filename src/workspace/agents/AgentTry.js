@@ -12,6 +12,14 @@ import { estCostPerRun, fmtUsd, humanizeAction } from './model.js';
 import { stageEdit, hasStaged, effectiveAgent } from './state.js';
 import { makeZip } from './zip.js';
 
+/** Escape, then render **bold**, _italic_, `code` and line breaks in agent replies. */
+const mdInline = (s = '') => String(s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(/(^|[\s(])_(.+?)_(?=[\s).,;:!?]|$)/g, '$1<i>$2</i>')
+  .replace(/`([^`]+)`/g, '<code>$1</code>')
+  .replace(/\n/g, '<br/>');
+
 const runsByAgent = new Map(); // keep the conversation when switching tabs
 
 function suggestions(agent) {
@@ -75,7 +83,7 @@ export function Playground({ project, agent, inputRef }) {
             <summary><${Icon} name="activity" size=${12} />${r.steps.length} steps · ${(r.ms / 1000).toFixed(1)}s · ${fmtUsd(r.cost)}</summary>
             <${Trace} compact steps=${r.steps} approval=${r.approval} onApprove=${() => decide(r.id, true)} onDeny=${() => decide(r.id, false)} />
           </details>
-          <div class="ag-msg is-agent" style=${{ '--ag-c': agent.color }}>${r.text}${r.after ? html`<div class="ag-msg__after">${r.after}</div>` : null}</div>`}
+          <div class="ag-msg is-agent" style=${{ '--ag-c': agent.color }}>${typeof r.text === 'string' ? html`<span dangerouslySetInnerHTML=${{ __html: mdInline(r.text) }}></span>` : r.text}${r.after ? html`<div class="ag-msg__after">${r.after}</div>` : null}</div>`}
       </div>`)}
       <div ref=${endRef}></div>
     </div>

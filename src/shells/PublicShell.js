@@ -58,7 +58,7 @@ export function PublicFooter() {
         <${Logo} />
         <p class="t-md t-muted" style="max-width:280px">Describe it. Approve the plan and the price. Watch it build. Own every layer.</p>
       </div>
-      <div class="pub-footer__col"><h4>Product</h4><a href="/#how">How it works</a><a href="/templates">Templates</a><a href="/marketplace">Marketplace</a><a href="/pricing">Pricing</a><a href="/start/import">Import a project</a></div>
+      <div class="pub-footer__col"><h4>Product</h4><a href="/tour">Reviewer guide</a><a href="/#how">How it works</a><a href="/templates">Templates</a><a href="/marketplace">Marketplace</a><a href="/pricing">Pricing</a><a href="/start/import">Import a project</a></div>
       <div class="pub-footer__col"><h4>For</h4>${Object.entries(PERSONAS).map(([id, p]) => html`<a href=${`/for/${id}`}>${p.label}</a>`)}</div>
       <div class="pub-footer__col"><h4>Build</h4><a href="/agents">Agents</a><a href="/connections">Integrations & MCP</a><a href="/help">Docs & guides</a><a href="/help#status">Status</a></div>
       <div class="pub-footer__col"><h4>Company</h4><a href="/enterprise">Enterprise</a><a href="/help#contact">Contact</a><a href="/help#security">Security</a><a href="/help#terms">Terms & privacy</a></div>

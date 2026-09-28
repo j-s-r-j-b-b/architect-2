@@ -21,6 +21,7 @@ const ROUTES = [
   { path: '/marketplace', load: () => import('./pages/public/Marketplace.js'), shell: 'auto' },
   { path: '/marketplace/:slug', load: () => import('./pages/public/MarketplaceApp.js'), shell: 'auto' },
   { path: '/help', load: () => import('./pages/app/Help.js'), shell: 'auto' },
+  { path: '/tour', load: () => import('./pages/tour/Tour.js'), shell: 'auto' },
   { path: '/login', load: () => import('./shells/Auth.js'), pick: 'LoginPage', shell: 'bare' },
   { path: '/signup', load: () => import('./shells/Auth.js'), pick: 'SignupPage', shell: 'bare' },
   { path: '/new', load: () => import('./shells/NewProject.js'), shell: 'bare' },
@@ -88,14 +89,14 @@ function Page({ load, pick, params, routeKey }) {
   return html`<${C} params=${params} key=${routeKey} />`;
 }
 
-let Palette = null, Helper = null;
+let Palette = null, Helper = null, TourLauncher = null;
 function GlobalOverlays() {
   const [, force] = useState(0);
   useEffect(() => {
-    Promise.all([import('./shells/CommandPalette.js'), import('./shells/Helper.js')]).then(([a, b]) => { Palette = a.default; Helper = b.default; force((x) => x + 1); }).catch((e) => console.warn(e));
+    Promise.all([import('./shells/CommandPalette.js'), import('./shells/Helper.js'), import('./pages/tour/TourLauncher.js')]).then(([a, b, c]) => { Palette = a.default; Helper = b.default; TourLauncher = c.default; force((x) => x + 1); }).catch((e) => console.warn(e));
   }, []);
   useHotkey('mod+k', () => { paletteOpen.value = !paletteOpen.value; });
-  return html`${Palette ? html`<${Palette} />` : null}${Helper ? html`<${Helper} />` : null}<${OverlayHost} />`;
+  return html`${Palette ? html`<${Palette} />` : null}${Helper ? html`<${Helper} />` : null}${TourLauncher ? html`<${TourLauncher} />` : null}<${OverlayHost} />`;
 }
 
 export function App() {

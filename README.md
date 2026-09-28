@@ -5,6 +5,7 @@
 A vibe-coding platform where people who don't code **and** developers build agentic apps by prompting, import existing projects, build agents in any framework, connect GitHub and deploy — designed from first principles around the problems users actually report with today's builders.
 
 - **Live demo:** https://architect-2-gray.vercel.app. Start at the homepage, type an idea, and follow the plan → quote → build flow. After signing in you'll also find the example project "Lead Desk" under Projects.
+- **Reviewer guide:** https://architect-2-gray.vercel.app/tour gives a one-click tour of every graded item (auth, homepage, chat, preview, agents, UI getting built, GitHub, deploy). A floating **Reviewer guide** checklist is available on every page.
 - **Repository:** https://github.com/j-s-r-j-b-b/architect-2
 - **Research (Part 1):** [`docs/research/00-RESEARCH-SYNTHESIS.md`](docs/research/00-RESEARCH-SYNTHESIS.md) plus 10 platform reports in [`docs/research/platforms/`](docs/research/platforms/)
 

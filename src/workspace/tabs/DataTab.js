@@ -254,7 +254,12 @@ function SqlConsole({ project }) {
 
 function SourceCallout({ project, table }) {
   const it = table.connection ? integrationById(table.connection) : null;
-  const connect = async (id) => { if (await openConnectSheet(id, { projectId: project.id })) toast(`${integrationById(id).name} connected — ${table.name} now uses live data`, { tone: 'success' }); };
+  const connect = async (id) => {
+    if (!(await openConnectSheet(id, { projectId: project.id }))) return;
+    // A table with no source yet is now read from the database the user just connected.
+    updateProject(project.id, (d) => { const t = d.data.tables.find((x) => x.id === table.id); if (t && !t.connection) { t.connection = id; t.source = 'live'; } });
+    toast(`${integrationById(id).name} connected — ${table.name} now uses live data`, { tone: 'success' });
+  };
   if (table.source === 'live') return html`<${Callout} tone="green" icon="check-circle" class="dt-callout">Live data${it ? ` from ${it.name}` : ''}. Edits here write back to the source.<//>`;
   if (table.source === 'test') return html`<${Callout} tone="violet" icon="flask" class="dt-callout">Test data written during preview runs. It’s kept separate from real data and cleared when you publish.<//>`;
   return html`<${Callout} tone="amber" icon="flask" class="dt-callout" action=${html`<${Button} size="sm" variant="secondary" icon="plug" onClick=${() => connect(table.connection || 'postgres')}>${it ? `Connect ${it.name}` : 'Connect a database'}<//>`}>

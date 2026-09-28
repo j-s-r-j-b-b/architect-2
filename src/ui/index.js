@@ -252,22 +252,40 @@ export function Logo({ size = 24, tag = true, href = '/', class: cls }) {
 // ---------------------------------------------------------------------------
 // Code
 // ---------------------------------------------------------------------------
-const KW = /\b(import|from|export|default|const|let|var|function|return|async|await|if|else|for|while|class|new|def|with|as|in|not|and|or|None|True|False|null|true|false|type|interface|extends|yield|lambda|try|except|catch|finally|raise|throw)\b/g;
+const KW = new Set('import from export default const let var function return async await if else for while class new def with as in not and or None True False null true false type interface extends yield lambda try except catch finally raise throw'.split(' '));
 function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-/** Very small syntax highlighter (JS/TS/Python/YAML/JSON/shell) — good enough for previews. */
+const HASH_LANGS = new Set(['py', 'python', 'yaml', 'yml', 'sh', 'bash', 'shell', 'toml', 'rb', 'env']);
+const PLAIN_LANGS = new Set(['md', 'markdown', 'txt', 'text', '']);
+/**
+ * Small single-pass syntax highlighter (JS/TS/Python/YAML/JSON/shell).
+ * Tokenises the raw text once, so markup it inserts is never re-scanned.
+ */
 export function highlight(code = '', lang = 'js') {
-  const lines = String(code).split('\n');
-  return lines.map((line) => {
-    let s = escapeHtml(line);
-    const commentRe = lang === 'py' || lang === 'yaml' || lang === 'sh' || lang === 'python' || lang === 'toml' ? /(#.*)$/ : /(\/\/.*)$/;
-    let comment = '';
-    const m = s.match(commentRe);
-    if (m && !/["'`]/.test(s.slice(0, m.index).replace(/"[^"]*"|'[^']*'|`[^`]*`/g, ''))) { comment = m[1]; s = s.slice(0, m.index); }
-    s = s.replace(/("[^"]*"|'[^']*'|`[^`]*`)/g, '<span class="tok-s">$1</span>');
-    s = s.replace(/(?<![\w-])(\d+(\.\d+)?)(?![\w-])/g, '<span class="tok-n">$1</span>');
-    if (lang === 'yaml') s = s.replace(/^(\s*-?\s*)([\w.-]+)(:)/, '$1<span class="tok-f">$2</span>$3');
-    else s = s.replace(KW, '<span class="tok-k">$1</span>').replace(/(\w+)(?=\()/g, '<span class="tok-f">$1</span>');
-    return s + (comment ? `<span class="tok-c">${comment}</span>` : '');
+  lang = String(lang || '').toLowerCase();
+  if (PLAIN_LANGS.has(lang)) return escapeHtml(String(code));
+  const yaml = lang === 'yaml' || lang === 'yml';
+  const re = HASH_LANGS.has(lang)
+    ? /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|#.*$|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$-]*/g
+    : /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\/\/.*$|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$]*/g;
+  return String(code).split('\n').map((line) => {
+    let out = '', last = 0, m;
+    re.lastIndex = 0;
+    while ((m = re.exec(line))) {
+      const tok = m[0];
+      if (!tok) { re.lastIndex++; continue; }
+      out += escapeHtml(line.slice(last, m.index));
+      last = m.index + tok.length;
+      const c = tok[0];
+      let cls = null;
+      if (c === '"' || c === "'" || c === '`') cls = yaml && line[last] === ':' ? 'tok-f' : 'tok-s';
+      else if (c === '#' || tok.startsWith('//')) cls = 'tok-c';
+      else if (c >= '0' && c <= '9') cls = 'tok-n';
+      else if (yaml) cls = /^\s*-?\s*$/.test(line.slice(0, m.index)) && line[last] === ':' ? 'tok-f' : (tok === 'true' || tok === 'false' || tok === 'null' ? 'tok-k' : null);
+      else if (KW.has(tok)) cls = 'tok-k';
+      else if (line[last] === '(') cls = 'tok-f';
+      out += cls ? `<span class="${cls}">${escapeHtml(tok)}</span>` : escapeHtml(tok);
+    }
+    return out + escapeHtml(line.slice(last));
   }).join('\n');
 }
 export function CodeBlock({ code = '', lang = 'js', title, copy = true, maxHeight, class: cls }) {
