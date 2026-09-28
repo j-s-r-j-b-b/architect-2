@@ -1,6 +1,6 @@
 /* App tab: preview toolbar, device frames, select / edit / annotate / X-ray overlays, console */
 
-.pv { display: flex; flex-direction: column; height: 100%; min-height: 560px; min-width: 0; background: var(--bg); }
+.pv { display: flex; flex-direction: column; height: 100%; min-height: 560px; min-width: 0; background: var(--bg); container-type: inline-size; container-name: pv; }
 .pv--empty { align-items: center; justify-content: center; padding: 40px 16px; background-color: var(--bg-sunken); }
 
 /* Toolbar */
@@ -11,7 +11,11 @@
 .pv-env { display: inline-flex; }
 .pv-actas { white-space: nowrap; }
 .pv-spin svg { animation: spin 0.5s linear; }
-@media (max-width: 1180px) { .pv-tools .segmented__opt span { display: none; } }
+/* The toolbar sizes to the preview pane (not the window): stay on one row as the chat panel grows.
+   The workspace header already shows Draft/Live + sample data, so the badge goes first. */
+@container pv (max-width: 1080px) { .pv-env { display: none; } }
+@container pv (max-width: 900px) { .pv-tools .segmented__opt span { display: none; } }
+@container pv (max-width: 720px) { .pv-actas span { display: none; } .pv-route { max-width: 170px; } }
 @media (max-width: 640px) {
   .pv-bar { padding: 8px; gap: 6px; }
   .pv-bar__spacer { display: none; }

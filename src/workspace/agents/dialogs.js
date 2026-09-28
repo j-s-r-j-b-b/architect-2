@@ -8,7 +8,9 @@ import { Modal, openModal, Button, Textarea, Input, Badge, Icon, Callout, Menu, 
 import { FRAMEWORKS, frameworkById } from '../../engine/catalog.js';
 import { IntegrationTile } from '../../shells/ConnectSheet.js';
 import { AGENT_TEMPLATES, agentFromTemplate, describeToSpec, DESCRIBE_EXAMPLES, normalizeAgent, humanizeAction, estCostPerRun, fmtUsd, riskyActions, toolConnection, TIER_MODEL } from './model.js';
-import { detectImport, agentFromImport, IMPORT_SAMPLES } from './importer.js';
+import { detectImport, agentFromImport, IMPORT_SAMPLES, trustScan, applyTrustFixes, addImportedEnv } from './importer.js';
+import { stageEdit } from './state.js';
+import { navigate } from '../../lib/router.js';
 import { AgentAvatar, FrameworkBadge, TierLabel } from './ui.js';
 import { triggerType } from './model.js';
 
@@ -113,7 +115,9 @@ function ImportPane({ project, draft, setDraft }) {
   const [file, setFile] = useState('');
   const [drag, setDrag] = useState(false);
   const det = useMemo(() => detectImport(code, file), [code, file]);
-  useEffect(() => { setDraft(det ? { ...agentFromImport(det, code, file), detection: det } : null); }, [det]);
+  const scan = useMemo(() => (det ? trustScan(det, code) : null), [det]);
+  useEffect(() => { setDraft(det ? { ...applyTrustFixes(agentFromImport(det, code, file), scan, code), detection: det } : null); }, [det]);
+  const flagged = scan ? scan.items.filter((i) => i.level !== 'ok').length : 0;
   const read = async (f) => {
     if (!f) return;
     if (f.size > 400e3) { toast('That file is over 400 KB — paste the agent file itself', { tone: 'warn' }); return; }
@@ -137,6 +141,14 @@ function ImportPane({ project, draft, setDraft }) {
         ${det.approvalsFound ? html`<span>Human-in-the-loop found → added to “Must ask before”.</span>` : null}
         ${det.modelId ? html`<span>Model: <span class="t-mono">${det.modelId}</span></span>` : null}
       </div>
+    </div>` : null}
+    ${scan ? html`<div class=${cx('ag-trust', flagged && 'is-flagged')}>
+      <div class="row gap-8"><${Icon} name="shield-check" size=${16} /><span class="t-strong">Trust check</span><span class="t-xs t-faint grow">Nothing imported runs until it passes</span>
+        <${Badge} size="sm" tone=${flagged ? 'amber' : 'green'} icon=${flagged ? 'wand' : 'check'}>${flagged ? `${flagged} fixed on import` : 'Passed'}<//></div>
+      <ul class="ag-trust__list">${scan.items.map((i) => html`<li class=${cx('ag-trust__item', `is-${i.level}`)}>
+        <${Icon} name=${i.level === 'ok' ? 'check-circle' : i.level === 'high' ? 'alert-circle' : 'alert-triangle'} size=${14} />
+        <div class="grow" style="min-width:0"><div>${i.label}</div>${i.fix ? html`<div class="t-xs t-muted">→ ${i.fix}</div>` : null}</div>
+      </li>`)}</ul>
     </div>` : null}
     ${draft ? html`<${SpecPreview} agent=${draft} project=${project} onRename=${(v) => setDraft({ ...draft, name: v })} />` : null}
   </div>`;
@@ -165,14 +177,17 @@ function NewAgentDialog({ close, project, mode: initial = 'describe', onCreate, 
     if (!draft) return;
     const { templateId, detection, startView, ...spec } = draft;
     onCreate(normalizeAgent({ ...spec, name: (spec.name || '').trim() || 'New agent' }), { delegateFrom: delegate && managers[0] && mode !== 'framework' ? managers[0].id : null, view: startView || (mode === 'import' ? 'code' : null) });
+    if (project?.id && spec.envRefs?.length) { addImportedEnv(project.id, spec); toast(`${spec.envRefs.length} secret${spec.envRefs.length > 1 ? 's' : ''} moved to environment variables`, { tone: 'success' }); }
     close(true);
   };
   const cta = { describe: 'Add as draft', template: 'Use template', import: 'Import as agent', framework: `Create in ${frameworkById(draft?.framework || 'langgraph').name.replace(' (open spec)', '')}` }[mode];
+  // Describe has its own "Draft the agent" step — don't show a second, disabled primary button beside it.
+  const showCta = !(mode === 'describe' && !draft);
   return html`<${Modal} size="xl" title="New agent" subtitle=${standalone ? 'Agents can live on their own — we’ll give it a home project you can add screens to later.' : `Adds a draft agent to ${project?.name || 'this project'}. Nothing runs until you try or publish it.`} icon="bot" onClose=${() => close(false)}
     footer=${html`
       ${managers.length && mode !== 'framework' && !standalone ? html`<span class="grow"><${Checkbox} checked=${delegate} onChange=${setDelegate} label=${`${managers[0].name} can hand work to it`} /></span>` : html`<span class="grow"></span>`}
       <${Button} variant="ghost" onClick=${() => close(false)}>Cancel<//>
-      <${Button} variant="primary" icon="plus" disabled=${!draft} onClick=${create}>${cta}<//>`}>
+      ${showCta ? html`<${Button} variant="primary" icon="plus" disabled=${!draft} onClick=${create}>${cta}<//>` : html`<span class="t-xs t-faint">Step 1 of 2 · describe it, then review</span>`}`}>
     <div class="ag-newtabs" role="tablist">
       ${MODES.map((m) => html`<button type="button" role="tab" aria-selected=${mode === m.id} class=${cx('ag-newtab', mode === m.id && 'is-active')} onClick=${() => setMode(m.id)}><${Icon} name=${m.icon} size=${14} />${m.label}</button>`)}
     </div>
@@ -209,24 +224,34 @@ function PublishDialog({ close, project, agent, changes, onConfirm, onConnect })
   const missing = (agent.tools || []).filter((t) => !t.mcp && toolConnection(project, t.id, connections.value) === 'needed');
   const risky = riskyActions(agent).filter((r) => !(agent.approvals || []).includes(r.action));
   const last = agent.tests?.lastRun;
+  const [fixed, setFixed] = useState({});
+  const go = (tab) => { close(false); navigate(`/p/${project.id}/agents/${agent.id}/${tab}`); };
+  const fixRisky = () => { stageEdit(project.id, agent.id, (d) => { d.approvals = [...new Set([...(d.approvals || []), ...risky.map((r) => r.action)])]; }); setFixed((f) => ({ ...f, risky: true })); };
+  const fixBudget = () => { stageEdit(project.id, agent.id, (d) => { d.limits = { ...(d.limits || {}), monthlyBudget: 20 }; }); setFixed((f) => ({ ...f, budget: true })); };
   const checks = [
-    { ok: !!last && last.passed === last.total, warn: !!last && last.passed < last.total, label: last ? `Dress rehearsal: ${last.passed} of ${last.total} passed` : 'Dress rehearsal not run yet', hint: last ? null : 'Run the Test tab first to catch surprises (≈0.2 credits).' },
-    { ok: agent.evalScore != null && agent.evalScore >= 0.8, warn: agent.evalScore != null && agent.evalScore < 0.8, label: agent.evalScore != null ? `Evaluation score ${Math.round(agent.evalScore * 100)}%` : 'Not evaluated yet' },
-    { ok: !missing.length, warn: !!missing.length, label: missing.length ? `${missing.map((t) => t.name || t.id).join(', ')} not connected — those steps will fail for real users` : 'Every tool is connected', action: missing[0] ? { label: `Connect ${missing[0].name || missing[0].id}`, onClick: () => onConnect(missing[0].id) } : null },
-    { ok: !risky.length, warn: !!risky.length, label: risky.length ? `${risky.map((r) => humanizeAction(r.action)).join(', ')} will run without asking anyone` : 'Risky actions ask a person first' },
-    { ok: agent.limits?.monthlyBudget != null, warn: agent.limits?.monthlyBudget == null, label: agent.limits?.monthlyBudget != null ? `Budget: ${fmtUsd(agent.limits.costPerRun)} per run · $${agent.limits.monthlyBudget} per month` : 'No monthly budget set' },
+    { ok: !!last && last.passed === last.total, warn: !!last && last.passed < last.total, label: last ? `Dress rehearsal: ${last.passed} of ${last.total} passed` : 'Dress rehearsal not run yet', hint: last ? (last.passed < last.total ? 'Open Test — each failure has a one-click fix.' : null) : 'Run the Test tab first to catch surprises (≈0.2 credits).', action: !last || last.passed < last.total ? { label: last ? 'See failures' : 'Run rehearsal', icon: 'flask', onClick: () => go('test') } : null },
+    { ok: agent.evalScore != null && agent.evalScore >= 0.8, warn: agent.evalScore != null && agent.evalScore < 0.8, label: agent.evalScore != null ? `Evaluation score ${Math.round(agent.evalScore * 100)}%` : 'Not evaluated yet', action: agent.evalScore == null || agent.evalScore < 0.8 ? { label: 'Evaluate', icon: 'bar-chart', onClick: () => go('evaluate') } : null },
+    { ok: !missing.length, warn: !!missing.length, label: missing.length ? `${missing.map((t) => t.name || t.id).join(', ')} not connected — those steps will fail for real users` : 'Every tool is connected', action: missing[0] ? { label: `Connect ${missing[0].name || missing[0].id}`, icon: 'plug', onClick: () => onConnect(missing[0].id) } : null },
+    fixed.risky
+      ? { ok: true, label: `${risky.map((r) => humanizeAction(r.action)).join(', ')} now ask${risky.length > 1 ? '' : 's'} a person first`, hint: 'Staged — included in this publish.' }
+      : { ok: !risky.length, warn: !!risky.length, label: risky.length ? `${risky.map((r) => humanizeAction(r.action)).join(', ')} will run without asking anyone` : 'Risky actions ask a person first', action: risky.length ? { label: 'Make them ask first', icon: 'shield', primary: true, onClick: fixRisky } : null },
+    fixed.budget
+      ? { ok: true, label: 'Budget: $20 per month', hint: 'Staged — the agent pauses itself and emails you at 100%.' }
+      : { ok: agent.limits?.monthlyBudget != null, warn: agent.limits?.monthlyBudget == null, label: agent.limits?.monthlyBudget != null ? `Budget: ${fmtUsd(agent.limits.costPerRun)} per run · $${agent.limits.monthlyBudget} per month` : 'No monthly budget set', action: agent.limits?.monthlyBudget == null ? { label: 'Set $20 / month', icon: 'coins', primary: true, onClick: fixBudget } : null },
   ];
   const warnings = checks.filter((c) => c.warn).length;
+  const oneClick = checks.filter((c) => c.warn && c.action?.primary);
+  const fixAll = () => oneClick.forEach((c) => c.action.onClick());
   return html`<${Modal} title=${`Publish ${agent.name} v${v}`} subtitle="Publishing makes this version the one your app, API and channels use. A checkpoint is saved first, so you can roll back." icon="rocket" onClose=${() => close(false)}
-    footer=${html`<span class="t-xs t-faint grow">${changes.length ? `Includes ${changes.length} unsaved change${changes.length > 1 ? 's' : ''}` : ''}</span><${Button} variant="ghost" onClick=${() => close(false)}>Cancel<//><${Button} variant=${warnings ? 'ink' : 'success'} icon="rocket" onClick=${() => { onConfirm(); close(true); }}>${warnings ? 'Publish anyway' : `Publish v${v}`}<//>`}>
+    footer=${html`<span class="t-xs t-faint grow">${(() => { const n = changes.length + Object.keys(fixed).length; return n ? `Includes ${n} unsaved change${n > 1 ? 's' : ''}` : ''; })()}</span><${Button} variant="ghost" onClick=${() => close(false)}>Cancel<//><${Button} variant=${warnings ? 'ink' : 'success'} icon="rocket" onClick=${() => { onConfirm(); close(true); }}>${warnings ? 'Publish anyway' : `Publish v${v}`}<//>`}>
     <ul class="ag-checks">
       ${checks.map((c) => html`<li class=${cx('ag-check', c.ok ? 'is-ok' : c.warn ? 'is-warn' : 'is-todo')}>
         <${Icon} name=${c.ok ? 'check-circle' : c.warn ? 'alert-triangle' : 'circle-dashed'} size=${16} />
         <div class="grow"><div>${c.label}</div>${c.hint ? html`<div class="t-xs t-faint">${c.hint}</div>` : null}</div>
-        ${c.action ? html`<${Button} size="sm" onClick=${c.action.onClick}>${c.action.label}<//>` : null}
+        ${c.action ? html`<${Button} size="sm" variant=${c.action.primary ? 'primary' : 'secondary'} icon=${c.action.icon} onClick=${c.action.onClick}>${c.action.label}<//>` : null}
       </li>`)}
     </ul>
-    ${warnings ? html`<${Callout} tone="amber" icon="info" class="mt-12">${warnings} thing${warnings > 1 ? 's' : ''} to look at. You can still publish — every run is traced and you can roll back from History.<//>` : html`<${Callout} tone="green" icon="shield-check" class="mt-12">Looks ready. Runs are billed per use and stop at your limits.<//>`}
+    ${warnings ? html`<${Callout} tone="amber" icon="info" class="mt-12" action=${oneClick.length > 1 ? html`<${Button} size="sm" variant="primary" icon="wand" onClick=${fixAll}>Fix ${oneClick.length} for me<//>` : null}>${warnings} thing${warnings > 1 ? 's' : ''} to look at. You can still publish — every run is traced and you can roll back from History.<//>` : html`<${Callout} tone="green" icon="shield-check" class="mt-12">Looks ready. Runs are billed per use and stop at your limits.<//>`}
   <//>`;
 }
 export function openPublishAgent(opts) { return openModal(PublishDialog, opts); }

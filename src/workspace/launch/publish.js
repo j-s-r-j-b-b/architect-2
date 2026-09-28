@@ -89,7 +89,8 @@ function PublishFlow({ close, projectId, env: env0 }) {
         <div class="ln-success__next">
           <button class="ln-next" onClick=${() => { close(true); navigate(`/p/${projectId}/launch/domains`); }}><${Icon} name="link" size=${16} /><span><strong>Set up a custom domain</strong><em>${domain ? domain : 'app.yourcompany.com'}</em></span><${Icon} name="chevron-right" size=${14} /></button>
           ${marketplace ? html`<div class="ln-next ln-next--static"><${Icon} name="store" size=${16} /><span><strong>Submitted to the Marketplace</strong><em>Review usually takes a day (prototype: simulated)</em></span></div>` : null}
-          <div class="ln-next ln-next--static"><${Icon} name="history" size=${16} /><span><strong>Rollback is one click</strong><em>Every deploy is a checkpoint</em></span></div>
+          ${analytics ? html`<button class="ln-next" onClick=${() => { close(true); navigate(`/p/${projectId}/insights`); }}><${Icon} name="bar-chart" size=${16} /><span><strong>Watch visits and agent runs</strong><em>Analytics are on · see them in Insights</em></span><${Icon} name="chevron-right" size=${14} /></button>` : null}
+          <button class="ln-next" onClick=${() => { close(true); navigate(`/p/${projectId}/launch/deploys`); }}><${Icon} name="history" size=${16} /><span><strong>Rollback is one click</strong><em>Every deploy is a checkpoint · re-deploy any version</em></span><${Icon} name="chevron-right" size=${14} /></button>
         </div>
       </div>
     <//>`;
@@ -104,7 +105,7 @@ function PublishFlow({ close, projectId, env: env0 }) {
       <${Ring} value=${pct} size=${64} stroke=${6} tone=${r.blocking.length ? 'amber' : 'green'} label=${`${r.score}/${r.total}`} />
       <div class="grow">
         <div class="t-lg t-strong">${r.blocking.length ? `${r.blocking.length} thing${r.blocking.length === 1 ? '' : 's'} to fix before Production` : 'Ready for Production'}</div>
-        <div class="t-sm t-muted">${r.score} of ${r.total} checks pass${r.checks.some((c) => c.accepted) ? ` · ${r.checks.filter((c) => c.accepted).length} risk accepted` : ''}. Staging never blocks — use it to try things safely.</div>
+        <div class="t-sm t-muted">${r.blocking.length} must fix · ${r.checks.filter((c) => c.status === 'warn' && !c.accepted).length} recommended · ${r.score} of ${r.total} pass${r.checks.some((c) => c.accepted) ? ` · ${r.checks.filter((c) => c.accepted).length} risk accepted` : ''}. Staging never blocks — use it to try things safely.</div>
       </div>
     </div>
     <${CheckGroups} projectId=${projectId} readiness=${r} compact onLeave=${() => close()} />
@@ -137,7 +138,10 @@ function PublishFlow({ close, projectId, env: env0 }) {
 }
 
 /** Open the Publish flow: Launch Readiness sheet → deploy progress → success. */
+let lastOpen = 0; // a double-click must not stack two publish sheets
 export async function openPublishFlow(projectId, opts = {}) {
+  if (Date.now() - lastOpen < 800) return false;
+  lastOpen = Date.now();
   const ok = await requireAuth({ reason: 'Sign in to publish your app', projectId });
   if (!ok) return false;
   return new Promise((resolve) => { openModal(PublishFlow, { projectId, env: opts.env }, { size: 'lg', onClose: (r) => resolve(!!r) }); });

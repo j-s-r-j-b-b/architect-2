@@ -28,7 +28,7 @@ export function applyProjectConnection(projectId, id, scopes) {
     const it = d.integrations.find((i) => i.id === id);
     if (it) { it.status = 'connected'; it.scopes = scopes || it.scopes; }
     else d.integrations.push({ id, status: 'connected', scopes: scopes || [], usedBy: [] });
-    for (const t of d.data.tables) if (t.connection === id) t.source = 'live';
+    for (const t of d.data.tables) if (t.connection === id) { t.source = 'live'; t.demoRows = true; } // simulated connection: rows stay sample until a real sync
     for (const e of d.env) if (e.source === id) for (const k of Object.keys(e.values)) e.values[k] = { set: true, last4: 'auto', managed: true };
   });
   logActivity(projectId, { plain: `Connected ${integrationById(id).name} — tables that read from it now show live data.`, technical: `integration:${id} → connected; OAuth token stored in vault (managed secret)` });

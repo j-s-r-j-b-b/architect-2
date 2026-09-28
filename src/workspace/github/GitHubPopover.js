@@ -9,6 +9,10 @@ import { Popover, Modal, Button, Input, Switch, Select, Badge, Progress, Icon, C
 
 export function hashText(s = '') { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 const fakeSha = (s) => (hashText(s) + hashText(s + '!')).slice(0, 7);
+/** In simulated mode a github.com link would 404 — explain instead of opening a dead page. */
+export function simLinkClick(real, what = 'This repository') {
+  return (e) => { if (real || isRealGitHub()) return; e.preventDefault(); e.stopPropagation(); toast(`${what} exists only in this prototype. Add a GitHub token to open it on github.com.`, { tone: 'info' }); };
+}
 export const SimBadge = () => (isRealGitHub() ? null : html`<${Badge} size="sm" tone="neutral" icon="flask" tip="No GitHub token in this session — repo actions are simulated">Simulated<//>`);
 
 /** Files that differ from the last push. */
@@ -87,7 +91,7 @@ function Panel({ project, close }) {
   const branches = g.branches?.length ? g.branches : ['main'];
   return html`<div class="cd-gh">
     <div class="cd-gh__head"><${Icon} name="github" size=${18} />
-      <a class="t-strong grow t-truncate link" href=${g.url || `https://github.com/${g.repo}`} target="_blank" rel="noopener">${g.repo}</a>${g.private ? html`<${Icon} name="lock" size=${12} />` : null}<${SimBadge} /></div>
+      <a class="t-strong grow t-truncate link" href=${g.url || `https://github.com/${g.repo}`} target="_blank" rel="noopener" onClick=${simLinkClick(g.real)}>${g.repo}</a>${g.private ? html`<${Icon} name="lock" size=${12} />` : null}<${SimBadge} /></div>
     <div class="cd-gh__row">
       <${Icon} name="git-branch" size=${14} />
       <${Select} size="sm" class="grow" value=${g.branch || 'main'} options=${branches.map((b) => ({ value: b, label: b }))} onValue=${(b) => updateProject(project.id, (d) => { d.github.branch = b; })} />

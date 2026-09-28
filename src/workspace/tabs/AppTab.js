@@ -66,7 +66,8 @@ export default function AppTab({ project }) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const t = e.target;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      if (document.querySelector('.modal, [role="dialog"]')) return;
+      // X-ray cards are in-page popovers (role=dialog for a11y), not modals: shortcuts keep working
+      if (document.querySelector('.modal, [role="dialog"]:not(.gx-xcard)')) return;
       const i = ['1', '2', '3', '4', '5'].indexOf(e.key);
       if (i >= 0) { e.preventDefault(); setPS({ mode: TOOLS[i].value }); }
       else if (e.key === 'Escape') setSel(null);

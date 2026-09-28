@@ -117,7 +117,7 @@ export function AgentBuild({ project, agent }) {
 
     <${Section} id="what" icon="file-text" title="What it does" tone=${tone('what', 'name')} summary=${`${String(agent.instructions).split(/\s+/).filter(Boolean).length} words`}>
       <div class="ag-grid2">
-        <${Input} label="In one line" value=${agent.role} placeholder="Scores new leads 0–100 and explains why" onValue=${(v) => stage((d) => { d.role = v; })} />
+        <${Input} label="Role — in one line" value=${agent.role} placeholder="Scores new leads 0–100 and explains why" onValue=${(v) => stage((d) => { d.role = v; })} />
         <${Input} label="Goal" optional value=${agent.goal} placeholder="What good looks like" onValue=${(v) => stage((d) => { d.goal = v; })} />
       </div>
       <${Textarea} label="Instructions" rows=${6} value=${agent.instructions} hint="Write it like you’d brief a new colleague. Plain words work best." onValue=${(v) => stage((d) => { d.instructions = v; })} />

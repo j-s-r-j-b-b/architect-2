@@ -16,7 +16,8 @@ const CHAN = { sms: 'text message', email: 'email', whatsapp: 'WhatsApp' };
 
 export const BOOKING = {
   id: 'booking', family: 'booking', label: 'Bookings & appointments', category: 'Commerce',
-  match: [[/\bbook(?:ing|ings)?\b(?! club)|appointments?|reservations?|\bslots?\b|walk-?ins?/, 3], [/patients?|clinic|salon|dentist|dental|physio|\bvet\b|barber|\bspa\b|no-?shows?/, 1.2]],
+  // "book" alone is usually the noun (book club, books to read), so only the verb forms count
+  match: [[/\bbookings?\b|\bbook(?:ed|s)? (?:a |an |the |their |your |my |our )?(?:appointments?|slots?|calls?|meetings?|sessions?|tables?|rooms?|class(?:es)?|visits?|consultations?|demos?|lessons?|online|in)\b|appointments?|reservations?|\bslots?\b|walk-?ins?/, 3], [/patients?|clinic|salon|dentist|dental|physio|\bvet\b|barber|\bspa\b|no-?shows?/, 1.2]],
   hints: { gcal: 1, twilio: 1 },
   name: (low, q) => (/concierge/.test(low) ? 'Booking Concierge' : q ? `${q} Bookings` : 'Booking Concierge'),
   icon: 'calendar', preset: 'teal', entity: ['appointment', 'appointments'], team: 'front desk', teamSize: '2–6 people',

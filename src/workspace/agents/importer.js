@@ -3,6 +3,7 @@
 import { INTEGRATIONS, frameworkById, MODELS } from '../../engine/catalog.js';
 import { normalizeAgent, TIER_MODEL, isRisky } from './model.js';
 import { uid } from '../../lib/util.js';
+import { updateProject } from '../../lib/store.js';
 
 const RULES = [
   ['langgraph', /\bfrom\s+langgraph|\bimport\s+langgraph|StateGraph\s*\(/],
@@ -67,6 +68,71 @@ export function detectImport(code, filename = '') {
   return { framework: fw || 'architect', recognised: !!fw, frameworkName: fwName || 'Architect native', nodes, toolNames, mapped, custom, name, instructions, modelId, summary, mainFile: MAIN_FILE[fw || 'architect'], approvalsFound: mapped.some((m) => m.approve) };
 }
 
+// ---------------------------------------------------------------------------
+// Trust gate — what we found in imported code before it can run on Architect.
+// ---------------------------------------------------------------------------
+const SECRET_RE = /(["'])((?:sk|pk|rk)-[A-Za-z0-9_-]{12,}|xox[abpr]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,})\1/g;
+const SECRET_ASSIGN_RE = /\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))\b["']?\s*\]?\s*[:=]\s*["']([^"'\s]{8,})["']/g;
+const envName = (s) => s.replace(/[^A-Z0-9_]/gi, '_').toUpperCase();
+
+/** Returns { items: [{level:'high'|'warn'|'ok', icon, label, fix}], secrets: [{name, masked}], unapproved: [action] } */
+export function trustScan(det, code = '') {
+  const secrets = [];
+  const seen = new Set();
+  let m;
+  const a = new RegExp(SECRET_ASSIGN_RE.source, 'g');
+  while ((m = a.exec(code))) if (!seen.has(m[2])) { seen.add(m[2]); secrets.push({ name: envName(m[1]), value: m[2] }); }
+  const b = new RegExp(SECRET_RE.source, 'g');
+  while ((m = b.exec(code))) if (!seen.has(m[2])) { seen.add(m[2]); secrets.push({ name: `IMPORTED_SECRET_${secrets.length + 1}`, value: m[2] }); }
+  const masked = secrets.map((s) => ({ name: s.name, masked: `${s.value.slice(0, 5)}…${s.value.slice(-2)}` }));
+  const unapproved = [];
+  for (const t of det?.mapped || []) if (!t.approve) for (const x of t.actions) if (isRisky(x)) unapproved.push(x);
+  const shell = /\b(subprocess|os\.system|child_process|eval\s*\(|exec\s*\()/.test(code);
+  const items = [
+    secrets.length
+      ? { level: 'high', icon: 'key', label: `${secrets.length} hard-coded secret${secrets.length > 1 ? 's' : ''} in the code (${masked.map((s) => s.name).join(', ')})`, fix: 'Moved to encrypted environment variables — the code reads them at run time and they never reach GitHub.' }
+      : { level: 'ok', icon: 'key', label: 'No hard-coded secrets found' },
+    unapproved.length
+      ? { level: 'warn', icon: 'shield-alert', label: `${unapproved.map((x) => x.replace(/_/g, ' ')).join(', ').replace(/^./, (c) => c.toUpperCase())} would run without asking anyone`, fix: 'Added to “Must ask before” — a person approves each one until you change it.' }
+      : { level: 'ok', icon: 'shield-check', label: 'Risky actions already ask a person first' },
+    shell
+      ? { level: 'warn', icon: 'terminal', label: 'Runs shell commands or eval()', fix: 'Runs in an isolated sandbox with no network except your connections.' }
+      : { level: 'ok', icon: 'terminal', label: 'No shell commands or eval()' },
+    det?.custom?.length
+      ? { level: 'warn', icon: 'code', label: `${det.custom.length} custom tool${det.custom.length > 1 ? 's' : ''} we can’t map to a connection (${det.custom.join(', ')})`, fix: 'Kept exactly as written and shown as locked on the card.' }
+      : null,
+  ].filter(Boolean);
+  return { items, secrets: masked, rawSecrets: secrets, unapproved };
+}
+
+/** Apply the trust-gate fixes: strip secrets into env refs, add missing approvals. */
+export function applyTrustFixes(agent, scan, code) {
+  let clean = code;
+  for (const s of scan.rawSecrets) clean = clean.split(s.value).join(`\${env.${s.name}}`);
+  const key = Object.keys(agent.codeOverrides || {})[0];
+  return {
+    ...agent,
+    approvals: [...new Set([...(agent.approvals || []), ...scan.unapproved])],
+    codeOverrides: key ? { ...agent.codeOverrides, [key]: clean } : agent.codeOverrides,
+    envRefs: scan.rawSecrets.map((s) => ({ key: s.name, last4: s.value.slice(-4) })),
+    imported: { ...(agent.imported || {}), trust: { secrets: scan.secrets.length, approvalsAdded: scan.unapproved.length, at: Date.now() } },
+  };
+}
+
+/** Store secrets pulled out by the trust gate as project env vars (secret, all environments). */
+export function addImportedEnv(pid, agent) {
+  const refs = agent?.envRefs || [];
+  if (!pid || !refs.length) return;
+  updateProject(pid, (d) => {
+    d.env = d.env || [];
+    for (const r of refs) {
+      if (d.env.some((e) => e.key === r.key)) continue;
+      const v = { set: true, last4: r.last4 };
+      d.env.push({ key: r.key, secret: true, source: 'import', values: { draft: v, staging: v, production: v } });
+    }
+  });
+}
+
 export function agentFromImport(det, code, filename) {
   const model = det.modelId && MODELS.find((m) => m.id === det.modelId);
   const approvals = [];
@@ -126,19 +192,27 @@ graph = builder.compile(name="ticket_triage")
 `,
   },
   {
-    id: 'crewai', label: 'CrewAI', file: 'crew.py', code: `from crewai import Agent, Crew, Process, Task
+    id: 'crewai', label: 'CrewAI', file: 'crew.py', code: `import os
+from crewai import Agent, Crew, Process, Task
 from crewai.tools import tool
+
+os.environ["SERPER_API_KEY"] = "sk-demo-7f3a9c21e84b4d0fa1c2"  # TODO move out of code
 
 @tool("Search the web")
 def websearch_search_web(query: str) -> str:
     """Search the public web."""
     ...
 
+@tool("Post the brief to Slack")
+def slack_post_message(channel: str, text: str) -> str:
+    """Post a message to a Slack channel."""
+    ...
+
 researcher = Agent(
     role="Market Researcher",
     goal="Find how competitors price and position their product",
     backstory="You research competitors carefully and cite every source.",
-    tools=[websearch_search_web],
+    tools=[websearch_search_web, slack_post_message],
     llm="anthropic/claude-sonnet-5",
 )
 writer = Agent(role="Brief Writer", goal="Write a one-page brief", backstory="You write crisp briefs.")

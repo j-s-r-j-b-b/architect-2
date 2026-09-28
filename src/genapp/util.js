@@ -110,17 +110,24 @@ export function GxAvatar({ name = '', size = 24, ring }) {
 
 /** Honest data: sample → amber badge, test → violet badge, live → nothing. */
 export function SourceBadge({ table, floating }) {
-  if (!table || table.source === 'live') return null;
+  if (!table) return null;
+  if (table.source === 'live' && table.demoRows) {
+    // Connected in the prototype, but the rows are still the sample ones — say so.
+    return html`<span class=${cx('gx-src', 'gx-src--test', floating && 'gx-src--float')} title=${`${table.name} is connected. This prototype simulates the connection, so it still shows sample rows.`}><${Icon} name="plug" size=${10} stroke=${2.4} />Connected · demo rows</span>`;
+  }
+  if (table.source === 'live') return null;
   const test = table.source === 'test';
   const tip = test ? `${table.name} holds test data written during development` : `${table.name} is sample data — connect a real source before launch`;
   return html`<span class=${cx('gx-src', test ? 'gx-src--test' : 'gx-src--sample', floating && 'gx-src--float')} title=${tip}><${Icon} name="flask" size=${10} stroke=${2.4} />${test ? 'Test data' : 'Sample data'}</span>`;
 }
 
-/** **bold** + line breaks → vnodes (no innerHTML). */
+/** **bold**, a line wrapped in _underscores_ (muted note) + line breaks → vnodes (no innerHTML). */
 export function mdLite(text = '') {
   const lines = String(text).split('\n');
   return lines.map((line, li) => {
-    const parts = line.split(/\*\*(.+?)\*\*/g).map((seg, i) => (i % 2 ? html`<strong>${seg}</strong>` : seg));
+    const note = /^_(.+)_$/.exec(line.trim());
+    const bold = (s) => s.split(/\*\*(.+?)\*\*/g).map((seg, i) => (i % 2 ? html`<strong>${seg}</strong>` : seg));
+    const parts = note ? html`<em class="gx-mdnote">${bold(note[1])}</em>` : bold(line);
     return li < lines.length - 1 ? [parts, html`<br />`] : parts;
   });
 }

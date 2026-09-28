@@ -1,6 +1,6 @@
 // Chart block in pure SVG: bar, line, area and donut, with hover tooltips.
 // Data comes from props.series or is computed from bind.table + groupBy/metric.
-import { html, useState, useRef, useLayoutEffect } from '../../lib/html.js';
+import { html, useState, useRef, useEffect, useLayoutEffect } from '../../lib/html.js';
 import { cx, uid, fmtNumber } from '../../lib/util.js';
 import { tableById } from '../../engine/schema.js';
 import { useGx, Panel, BlockNote, lockedForVisitor } from '../util.js';
@@ -27,15 +27,23 @@ function niceMax(v) {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * exp;
 }
 
+// Re-measures after every render and re-binds the observer if the measured node was replaced
+// (route switches / rebuilds can swap it), so charts never keep a stale 360px width and overflow.
 function useWidth(ref, fallback = 360) {
   const [w, setW] = useState(fallback);
+  const obs = useRef({ el: null, ro: null });
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(([e]) => { const cw = Math.round(e.contentRect.width); if (cw > 0) setW(cw); });
+    if (!el) return;
+    const cw = Math.round(el.clientWidth);
+    if (cw > 0 && Math.abs(cw - w) > 1) setW(cw);
+    if (obs.current.el === el || typeof ResizeObserver === 'undefined') return;
+    obs.current.ro?.disconnect();
+    const ro = new ResizeObserver(([e]) => { const c = Math.round(e.contentRect.width); if (c > 0) setW(c); });
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    obs.current = { el, ro };
+  });
+  useEffect(() => () => obs.current.ro?.disconnect(), []);
   return w;
 }
 

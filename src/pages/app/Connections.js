@@ -1,7 +1,7 @@
 // Account-level connections: apps, MCP servers, model keys (BYOK) and GitHub.
 import { html, useState } from '../../lib/html.js';
 import { AppPage } from '../../shells/AppShell.js';
-import { connections, setConnection, addMcpServer, removeMcpServer, setModelKey } from '../../lib/store.js';
+import { connections, setConnection, addMcpServer, removeMcpServer, setModelKey, projectList } from '../../lib/store.js';
 import { githubAccount, connectGitHub, disconnectGitHub, isRealGitHub } from '../../lib/github.js';
 import { INTEGRATIONS, INTEGRATION_CATEGORIES, MCP_SERVERS } from '../../engine/catalog.js';
 import { openConnectSheet, IntegrationTile } from '../../shells/ConnectSheet.js';
@@ -117,6 +117,7 @@ function Keys() {
 function GitHub() {
   const a = githubAccount.value;
   const [busy, setBusy] = useState(false);
+  const linked = projectList.value.filter((p) => p.github?.connected && p.github?.repo);
   return html`<div class="ap-conn ap-conn--wide">
     <div class="row gap-12">
       ${a.connected ? html`<${Avatar} name=${a.name || a.login} src=${a.avatar} />` : html`<span class="ap-mcp-icon"><${Icon} name="github" size=${18} /></span>`}
@@ -129,6 +130,16 @@ function GitHub() {
         : html`<${Button} variant="ink" icon="github" loading=${busy} onClick=${async () => { setBusy(true); try { await connectGitHub(); toast('GitHub connected', { tone: 'success' }); } catch (e) { toast(e.message || 'Couldn’t connect', { tone: 'error' }); } setBusy(false); }}>Connect GitHub<//>`}
     </div>
     ${!isRealGitHub() && !a.real ? html`<div class="t-xs t-faint row gap-4"><${Icon} name="flask" size=${12} />Prototype: demo mode uses a simulated GitHub account.</div>` : null}
+    ${a.connected || linked.length ? html`<div class="col gap-8">
+      <span class="field__label">Projects linked to a repository</span>
+      ${!a.connected ? html`<span class="t-xs t-amber">GitHub is disconnected — these repos stay on GitHub. Reconnect to pull, push or open pull requests.</span>` : null}
+      ${linked.length ? html`<div class="ap-list">${linked.map((p) => html`<a class="ap-list__row ap-list__row--link" href=${`/p/${p.id}/code`}>
+        <${Icon} name="git-branch" size=${15} class="t-faint" />
+        <div class="grow col gap-2" style="min-width:0"><span class="t-strong t-truncate">${p.name}</span><span class="t-xs t-faint t-mono t-truncate">${p.github.repo} · ${p.github.branch || 'main'}</span></div>
+        <span class="t-xs t-faint t-nowrap">${p.github.lastPush ? `pushed ${timeAgo(p.github.lastPush.at)}` : 'not pushed yet'}${p.github.prs?.length ? ` · ${p.github.prs.length} PR${p.github.prs.length === 1 ? '' : 's'}` : ''}</span>
+        <${Icon} name="chevron-right" size=${14} class="t-faint" />
+      </a>`)}</div>` : html`<div class="t-sm t-muted">None yet. Open a project and use the GitHub button in its top bar to create a repo and push.</div>`}
+    </div>` : null}
   </div>`;
 }
 

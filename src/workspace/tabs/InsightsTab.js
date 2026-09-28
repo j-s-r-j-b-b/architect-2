@@ -1,8 +1,13 @@
 // Insights tab: KPIs with sparklines, agent runs & traces, errors → "Ask Architect to fix", cost vs forecast.
 import { html, useState, useMemo } from '../../lib/html.js';
-import { Button, Icon, Badge, Callout, Segmented, Slider, Empty, StatusPill } from '../../ui/index.js';
+import { Button, Icon, Badge, Callout, Segmented, Slider, Empty, StatusPill, Switch, toast } from '../../ui/index.js';
 import { tableById } from '../../engine/schema.js';
+import { integrationById } from '../../engine/catalog.js';
+import { updateProject } from '../../lib/store.js';
+import { navigate } from '../../lib/router.js';
 import { askArchitect } from '../bus.js';
+import { FIXES } from '../agents/quality.js';
+import { effectiveAgent, stageEdit } from '../agents/state.js';
 import { cx, seeded, fmtNumber, fmtMoney, timeAgo, plural } from '../../lib/util.js';
 
 const hash = (s = '') => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -78,7 +83,10 @@ export default function InsightsTab({ project: p }) {
   const errors = agents.filter((a) => a.stats?.errors > 0).map((a) => {
     const tool = a.tools?.[0];
     const msg = tool ? `${tool.id}.${tool.actions?.[0] || 'call'} timed out after 10s` : 'Model output failed the output contract (missing field)';
-    return { id: `err_${a.id}`, agent: a, msg, count: a.stats.errors, at: Date.now() - (a.stats.errors * 3.1 + 2) * 36e5 };
+    const toolName = tool ? integrationById(tool.id).name : '';
+    const cause = tool ? `${toolName} was slow to answer, and the agent gave up after one try — so the person got no reply.` : 'The agent replied without one of the fields your screens need, so the screen showed a blank.';
+    const fixPlain = tool ? 'Retry with growing gaps (2s → 8s → 30s), then queue the task and tell the person.' : 'Check every required field before replying; ask for anything missing instead of guessing.';
+    return { id: `err_${a.id}`, agent: a, msg, cause, fixPlain, fix: tool ? FIXES.retry : FIXES.contract, count: a.stats.errors, at: Date.now() - (a.stats.errors * 3.1 + 2) * 36e5 };
   });
 
   const [perDay, setPerDay] = useState(() => Math.max(10, Math.round((m.runs7 || 70) / 7 / 10) * 10));
@@ -122,14 +130,22 @@ export default function InsightsTab({ project: p }) {
 
       <section class="in-card">
         <div class="in-card__head"><${Icon} name="alert-triangle" size=${15} /><span class="t-strong grow">Errors</span>${errors.length ? html`<${Badge} tone="red" size="sm">${errors.reduce((n, e) => n + e.count, 0)}<//>` : null}</div>
-        ${errors.length ? errors.map((e) => html`<div class="in-err">
-          <div class="row gap-8"><span class="t-sm t-strong grow">${e.msg}</span><span class="t-xs t-faint">${e.count}×</span></div>
-          <div class="t-xs t-muted mt-4">${e.agent.name} · last seen ${timeAgo(e.at)}</div>
-          <div class="row gap-8 mt-8"><${Button} size="sm" variant="secondary" icon="sparkles" onClick=${() => askArchitect(`Fix this error in ${e.agent.name}: “${e.msg}”. It happened ${e.count}× in the last 7 days — find the cause, add a retry or fallback, and test it.`, { kind: 'error', id: e.id, label: e.msg })}>Ask Architect to fix<//><span class="t-xs t-faint">Fixes for problems Architect caused are free.</span></div>
-        </div>`) : html`<div class="in-ok"><${Icon} name="check-circle" size=${16} />No errors in this period.</div>`}
+        ${errors.length ? errors.map((e) => {
+          const staged = (effectiveAgent(p, e.agent.id)?.instructions || '').includes(e.fix);
+          const apply = () => { stageEdit(p.id, e.agent.id, (d) => { if (!d.instructions.includes(e.fix)) d.instructions = `${d.instructions.trim()} ${e.fix}`.trim(); }); toast(`Fix staged in ${e.agent.name} — save and re-test it`, { tone: 'success', action: { label: 'Open agent', onClick: () => navigate(`/p/${p.id}/agents/${e.agent.id}/test`) } }); };
+          return html`<div class="in-err">
+          <div class="row gap-8"><span class="t-sm t-strong grow t-mono in-err__msg">${e.msg}</span><span class="t-xs t-faint">${e.count}×</span></div>
+          <div class="t-xs t-muted mt-4"><a class="in-link" href=${`/p/${p.id}/agents/${e.agent.id}/monitor`}>${e.agent.name}</a> · last seen ${timeAgo(e.at)}</div>
+          <dl class="in-doc"><dt><${Icon} name="stethoscope" size=${12} />Cause</dt><dd>${e.cause}</dd><dt><${Icon} name="wand" size=${12} />Fix</dt><dd>${e.fixPlain}</dd></dl>
+          <div class="row gap-8 mt-8 wrap">
+            ${staged ? html`<${Badge} tone="green" icon="check">Fix staged<//>` : html`<${Button} size="sm" variant="primary" icon="wand" onClick=${apply}>Apply fix<//>`}
+            <${Button} size="sm" variant="ghost" icon="sparkles" onClick=${() => askArchitect(`Fix this error in ${e.agent.name}: “${e.msg}”. It happened ${e.count}× in the last 7 days — find the cause, add a retry or fallback, and test it.`, { kind: 'error', id: e.id, label: e.msg })}>Ask Architect<//>
+            <span class="t-xs t-faint">Fixes for problems Architect caused are free.</span>
+          </div>
+        </div>`; }) : html`<div class="in-ok"><${Icon} name="check-circle" size=${16} />No errors in this period.</div>`}
         <div class="in-card__head mt-16"><${Icon} name="bot" size=${15} /><span class="t-strong grow">By agent</span></div>
         ${agents.length ? html`<table class="in-table"><thead><tr><th>Agent</th><th>Runs</th><th>Errors</th><th>Eval</th></tr></thead><tbody>
-          ${agents.map((a) => html`<tr><td><span class="row gap-6"><span class="in-agent-dot" style=${{ background: a.color || 'var(--violet)' }}></span><span class="t-truncate">${a.name}</span></span></td><td class="t-tabular">${fmtNumber(Math.round((a.stats?.runs || 0) * days / 7))}</td><td class="t-tabular">${Math.round((a.stats?.errors || 0) * days / 7)}</td><td>${a.evalScore != null ? html`<${Badge} size="sm" tone=${a.evalScore >= 0.85 ? 'green' : 'amber'}>${Math.round(a.evalScore * 100)}%<//>` : html`<span class="t-faint">—</span>`}</td></tr>`)}
+          ${agents.map((a) => html`<tr class="in-table__row" onClick=${(e) => { if (!e.target.closest('a')) navigate(`/p/${p.id}/agents/${a.id}/monitor`); }}><td><a class="row gap-6 in-link" href=${`/p/${p.id}/agents/${a.id}/monitor`} data-tip="Open this agent’s runs"><span class="in-agent-dot" style=${{ background: a.color || 'var(--violet)' }}></span><span class="t-truncate">${a.name}</span></a></td><td class="t-tabular">${fmtNumber(Math.round((a.stats?.runs || 0) * days / 7))}</td><td class="t-tabular">${Math.round((a.stats?.errors || 0) * days / 7)}</td><td>${a.evalScore != null ? html`<${Badge} size="sm" tone=${a.evalScore >= 0.85 ? 'green' : 'amber'}>${Math.round(a.evalScore * 100)}%<//>` : html`<span class="t-faint">—</span>`}</td></tr>`)}
         </tbody></table>` : html`<div class="t-sm t-muted">No agents in this app.</div>`}
       </section>
     </div>
@@ -154,5 +170,38 @@ export default function InsightsTab({ project: p }) {
         </div>
       </div>
     </section>
+
+    <${Alerts} p=${p} m=${m} actualMonthly=${actualMonthly} />
   </div>`;
+}
+
+/** Alert rules — plain-words triggers with a live "would it fire now?" status. Saved on the project. */
+function Alerts({ p, m, actualMonthly }) {
+  const saved = p.settings?.alerts || {};
+  const runs = m.runs.reduce((a, b) => a + b, 0);
+  const errRate = runs ? m.errs / runs : 0;
+  const budget = (p.agents || []).reduce((n, a) => n + (a.limits?.monthlyBudget || 0), 0);
+  const p95 = Math.round((m.lat || 0) * 1.9);
+  const rules = [
+    { id: 'errors', icon: 'alert-triangle', label: 'Errors go above 5% of runs', hint: 'Checked every 5 minutes', def: true, fire: errRate > 0.05, now: m.errs ? `${(errRate * 100).toFixed(1)}% right now` : 'No errors right now' },
+    { id: 'spend', icon: 'coins', label: 'Model spend passes 80% of the monthly budget', hint: budget ? `Budget across agents: ${fmtMoney(budget)} / month` : 'Set a monthly budget on each agent', def: true, fire: budget > 0 && actualMonthly > budget * 0.8, now: budget ? `On pace for ${Math.round((actualMonthly / budget) * 100)}% of budget` : 'No budget set yet' },
+    { id: 'slow', icon: 'timer', label: 'Replies get slow (slowest 5% over 8s)', hint: 'Usually a slow tool or a big knowledge search', def: false, fire: p95 > 8000, now: p95 ? `Slowest 5%: ${(p95 / 1000).toFixed(1)}s` : 'No runs yet' },
+    { id: 'traffic', icon: 'users', label: 'Visits drop by half compared with last week', hint: 'Catches a broken link or a failed deploy early', def: false, fire: false, now: 'Traffic is steady' },
+  ];
+  const on = (r) => (saved[r.id] ?? r.def);
+  const set = (id, v) => updateProject(p.id, (d) => { d.settings = { ...(d.settings || {}), alerts: { ...(d.settings?.alerts || {}), [id]: v } }; });
+  const active = rules.filter(on).length;
+  return html`<section class="in-card mt-16" aria-labelledby="in-alerts-h">
+    <div class="in-card__head"><${Icon} name="bell" size=${15} /><span class="t-strong grow" id="in-alerts-h">Alerts</span><span class="t-xs t-muted">${active} of ${rules.length} on · sent to your Inbox and email</span>
+      <${Button} size="sm" variant="ghost" icon="send" onClick=${() => toast('Test alert sent to your Inbox and email', { tone: 'success' })}>Send a test<//></div>
+    <div class="in-alerts">
+      ${rules.map((r) => html`<div class=${cx('in-alert', on(r) && r.fire && 'is-firing')}>
+        <span class="in-alert__icon"><${Icon} name=${r.icon} size=${14} /></span>
+        <div class="grow" style="min-width:0">
+          <${Switch} checked=${on(r)} label=${r.label} hint=${r.hint} onChange=${(v) => set(r.id, v)} />
+          <div class="in-alert__now">${on(r) && r.fire ? html`<${Badge} size="sm" tone="amber" dot>Would fire now<//>` : html`<${Badge} size="sm" tone=${on(r) ? 'green' : 'outline'} dot=${on(r)}>${on(r) ? 'Quiet' : 'Off'}<//>`}<span class="t-xs t-faint">${r.now}</span></div>
+        </div>
+      </div>`)}
+    </div>
+  </section>`;
 }

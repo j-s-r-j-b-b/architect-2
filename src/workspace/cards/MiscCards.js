@@ -118,6 +118,15 @@ export function undoChange(projectId, msgId) {
   });
 }
 
+// Intents describe a change before it runs ("I’ll make the header navy"). Once applied, the
+// card should say what happened ("Made the header navy").
+const PAST = { make: 'Made', add: 'Added', change: 'Changed', remove: 'Removed', delete: 'Deleted', rename: 'Renamed', connect: 'Connected', move: 'Moved', set: 'Set', turn: 'Turned', show: 'Showed', hide: 'Hid', update: 'Updated', create: 'Created', clear: 'Cleared', switch: 'Switched', replace: 'Replaced', put: 'Put', give: 'Gave', use: 'Used', let: 'Let', send: 'Sent', swap: 'Swapped', build: 'Built', write: 'Wrote', sort: 'Sorted', group: 'Grouped', filter: 'Filtered', limit: 'Limited', tighten: 'Tightened', raise: 'Raised', lower: 'Lowered', require: 'Required', schedule: 'Scheduled', wire: 'Wired', apply: 'Applied', fix: 'Fixed', restyle: 'Restyled', enable: 'Enabled', disable: 'Disabled', allow: 'Allowed', block: 'Blocked', keep: 'Kept', include: 'Included', drop: 'Dropped', rewrite: 'Rewrote', shorten: 'Shortened', start: 'Started', stop: 'Stopped', pause: 'Paused', translate: 'Translated', link: 'Linked', attach: 'Attached', insert: 'Inserted', split: 'Split', merge: 'Merged', reorder: 'Reordered', resize: 'Resized', round: 'Rounded' };
+export function pastTense(s = '') {
+  return String(s)
+    .replace(/(^|[.!?]\s+)I(?:’ll|'ll| will) (\w+)/g, (m, pre, v) => (PAST[v.toLowerCase()] ? `${pre}${PAST[v.toLowerCase()]}` : m))
+    .replace(/This can’t be undone except by restoring the checkpoint saved first\./, 'Undo restores the checkpoint saved just before.');
+}
+
 export function ChangeCard({ msg, project }) {
   const d = msg.data || {};
   const [tech, setTech] = useState(false);
@@ -127,7 +136,7 @@ export function ChangeCard({ msg, project }) {
     meta=${html`<${Badge} size="sm" tone=${d.free || !d.credits ? 'neutral' : 'outline'}>${cost}${d.quote && !d.free && d.credits ? html` <span class="t-faint">of ${fmtRange(d.quote)}</span>` : null}<//>`}
     footer=${html`<span class="ws-fine">${d.checkpoint ? `Checkpoint #${d.checkpoint}` : ''}</span><span class="grow"></span>
       ${d.prevCheckpointId && !d.undone ? html`<${Button} size="sm" variant="ghost" icon="undo" onClick=${() => undoChange(project.id, msg.id)}>Undo<//>` : null}`}>
-    <p class=${cx('ws-card__lead', d.undone && 'is-struck')}>${rich(d.plain || msg.text)}</p>
+    <p class=${cx('ws-card__lead', d.undone && 'is-struck')}>${rich(pastTense(d.plain || msg.text))}</p>
     ${(d.technical || d.files?.length) ? html`<button type="button" class="ws-linkbtn" onClick=${() => setTech(!tech)} aria-expanded=${tech}>
       <${Icon} name=${tech ? 'chevron-up' : 'code'} size=${12} />Technical
       ${d.diff && (d.diff.added || d.diff.removed) ? html`<span class="ws-diff"><span class="is-add">+${d.diff.added}</span><span class="is-del">−${d.diff.removed}</span></span>` : null}

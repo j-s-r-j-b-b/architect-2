@@ -1,7 +1,7 @@
 // Planning cards: questions, plan (and plan-mode proposals), scope contract, quote.
-import { html, useState, useMemo } from '../../lib/html.js';
+import { html, useState, useMemo, signal } from '../../lib/html.js';
 import { navigate } from '../../lib/router.js';
-import { wallet, session } from '../../lib/store.js';
+import { wallet, session, updateProject } from '../../lib/store.js';
 import { Button, Icon, Badge, Slider, Segmented, StatusPill, toast } from '../../ui/index.js';
 import { cx, fmtRange, fmtNumber } from '../../lib/util.js';
 import { MODEL_TIERS } from '../../engine/catalog.js';
@@ -176,14 +176,25 @@ function quoteFor(project, tier) {
   }
   return { ...q, modelTier: tier };
 }
-const defaultCap = (q) => Math.max(q?.cap || 0, Math.ceil(((q?.credits?.[1] || 40) * 1.25) / 5) * 5);
+export { quoteFor };
+
+// One draft budget cap + model tier per project, shared by the chat Quote card and the
+// Plan › Spec quote so the two never disagree. Default cap: 80% pause point ≥ top of the range.
+export const capDraft = signal({});
+export const suggestedCap = (q) => Math.max(5, Math.ceil(((q?.credits?.[1] || 40) * 1.25) / 5) * 5);
+export const draftCap = (p, q) => capDraft.value[p.id] ?? suggestedCap(q);
+export const setDraftCap = (pid, v) => { capDraft.value = { ...capDraft.value, [pid]: v }; };
+export const draftTier = (p) => p.settings?.modelTier || p.plan?.quote?.modelTier || 'balanced';
+export const setDraftTier = (pid, v) => updateProject(pid, (d) => { d.settings.modelTier = v; }, { touch: false });
 
 export function QuoteCard({ msg, project }) {
   const base = project.plan?.quote;
   const status = msg.data?.status || 'open';
-  const [tier, setTier] = useState(base?.modelTier || project.settings.modelTier || 'balanced');
+  const tier = draftTier(project);
+  const setTier = (v) => setDraftTier(project.id, v);
   const q = useMemo(() => quoteFor(project, tier), [project.plan?.quote, tier]);
-  const [cap, setCap] = useState(() => defaultCap(base));
+  const cap = q ? draftCap(project, q) : 0;
+  const setCap = (v) => setDraftCap(project.id, v);
   const [busy, setBusy] = useState(false);
   if (!q) return html`<${CardFrame} tone="neutral" icon="coins" title="Quote"><p class="t-sm t-muted">The quote appears once the plan is ready.</p><//>`;
 
@@ -212,7 +223,9 @@ export function QuoteCard({ msg, project }) {
       const ok = await requireAuth({ reason: 'Sign in to build your app', projectId: project.id });
       if (!ok) return;
       approveQuote(project.id, { cap: c, modelTier: tier });
-      toast('Build started — watch it come together', { tone: 'success' });
+      toast('Build started — watch your app take shape', { tone: 'success' });
+      // The build is the moment: take the user to the live preview filling in.
+      if (!/\/app(\/|$)/.test(location.pathname)) navigate(`/p/${project.id}/app`);
     } finally { setBusy(false); }
   };
 

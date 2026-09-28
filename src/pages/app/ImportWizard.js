@@ -135,11 +135,21 @@ function TrustGate({ report, onChoose }) {
   <//>`;
 }
 
-function Understanding({ report, trusted, onOpen, opening }) {
+/** One or two sentences a non-developer can read: what the project is and what it needs. */
+function plainSummary(r) {
+  const name = r.name || r.ref || 'This project';
+  const fe = r.stack.find((s) => /front/i.test(s.kind))?.label;
+  const screens = r.routes.length ? `${plural(r.routes.length, 'screen')} (${r.routes.slice(0, 3).map((x) => x.route).join(', ')}${r.routes.length > 3 ? '…' : ''})` : 'no screens yet';
+  const agents = r.agents.length ? ` It already has ${plural(r.agents.length, 'AI agent')} — ${r.agents.map((a) => `${a.name} (${frameworkById(a.framework).name})`).join(', ')} — and we keep ${r.agents.length === 1 ? 'it' : 'them'} in that framework.` : ' It has no AI agents yet; you can add some after import.';
+  const tests = r.tests.length ? ` There ${r.tests.length === 1 ? 'is' : 'are'} ${plural(r.tests.length, 'test file')} we can run to check nothing breaks.` : '';
+  return `${name} is ${fe ? `a ${fe} app` : 'a project'} with ${screens}.${agents}${tests}`;
+}
+
+function Understanding({ report, trusted, onOpen, opening, source }) {
   const lines = useMemo(() => [
     `Reading ${plural(report.files.length, 'file')}`,
     `Detecting the stack${report.stack.length ? ` — ${report.stack[0].label}` : ''}`,
-    `Mapping ${plural(report.routes.length, 'route')}${report.api.length ? ` and ${plural(report.api.length, 'API endpoint')}` : ''}`,
+    report.routes.length || report.api.length ? `Mapping ${plural(report.routes.length, 'route')}${report.api.length ? ` and ${plural(report.api.length, 'API endpoint')}` : ''}` : 'Looking for screens — none, we’ll add a console',
     `Finding agents — ${report.agents.length ? report.agents.map((a) => frameworkById(a.framework).name).filter((v, i, a) => a.indexOf(v) === i).join(', ') : 'none'}`,
     `Checking secrets — ${report.secrets.length} needed`,
     trusted ? `Running ${plural(report.tests.length, 'test file')} in the sandbox` : 'Skipping tests (read-only)',
@@ -157,6 +167,17 @@ function Understanding({ report, trusted, onOpen, opening }) {
       <div class="row gap-8 mb-8"><span class="t-strong grow">${done ? 'Here’s what we found' : 'Understanding your project…'}</span>${!done ? html`<${Spinner} size="sm" />` : html`<${Badge} tone="green" icon="check">Done<//>`}</div>
       <ul class="ap-analyse">${lines.map((l, i) => html`<li class=${cx(i < at && 'is-done', i === at && 'is-active')}>${i < at ? html`<${Icon} name="check" size=${13} />` : i === at ? html`<${Spinner} size="sm" />` : html`<${Icon} name="circle" size=${13} />`}<span>${l}</span></li>`)}</ul>
     <//>
+    ${done ? html`<${Card} padded class="ap-plain anim-rise">
+      <div class="row gap-8 mb-8"><${Icon} name="message-circle" size=${16} class="t-blueprint" /><span class="t-strong grow">In plain words</span><${Badge} size="sm" tone="blueprint">Understanding report<//></div>
+      <p class="t-md">${plainSummary(report)}</p>
+      <div class="t-sm t-strong mt-12 mb-4">What happens when you open it</div>
+      <ol class="ap-next t-sm t-muted">
+        <li>We save an <b>“Imported”</b> checkpoint first. ${report.ref && source === 'github' ? 'Your repository on GitHub is not touched.' : 'Your original files are not touched.'}</li>
+        <li>${source === 'github' ? html`Architect works on a branch. Every change comes back to you as a <b>pull request</b> you can review.` : html`You can connect GitHub any time from the top bar to push the code to your own repository.`}</li>
+        ${report.secrets.length ? html`<li>Add ${plural(report.secrets.length, 'secret')} (${report.secrets.slice(0, 3).join(', ')}) when you’re ready for real data. Until then the app shows <b>sample data</b>, clearly badged.</li>` : null}
+        <li>Tell Architect what to change in plain words, or open the Code tab to edit files yourself.</li>
+      </ol>
+    <//>` : null}
     ${done ? html`<div class="ap-report anim-rise">
       <${Card} title="Stack" icon="layers">${report.stack.length ? html`<div class="row gap-6 wrap">${report.stack.map((s) => html`<${Badge} icon=${s.icon}>${s.kind}: ${s.label}<//>`)}</div>` : html`<span class="t-sm t-muted">Not detected</span>`}<//>
       <${Card} title=${`Screens (${report.routes.length})`} icon="monitor">${report.routes.length ? html`<ul class="ap-kv">${report.routes.map((r) => html`<li><code>${r.route}</code><span class="t-faint t-truncate">${r.file}</span></li>`)}</ul>` : html`<span class="t-sm t-muted">No UI routes — we’ll add a simple console screen.</span>`}<//>
@@ -210,7 +231,7 @@ export default function ImportWizard() {
         ${inspecting ? html`<div class="ap-inspecting"><${Spinner} size="sm" /> Reading ${inspecting}…</div>` : null}
         <div class="mt-12"><button class="link t-sm" onClick=${() => setQuery({ source: null })}>← Choose a different source</button></div>` : null}
       ${report && trusted === null ? html`<${TrustGate} report=${report} onChoose=${setTrusted} /><div class="mt-12"><button class="link t-sm" onClick=${() => setReport(null)}>← Back</button></div>` : null}
-      ${report && trusted !== null ? html`<${Understanding} report=${report} trusted=${trusted} onOpen=${open} opening=${opening} />` : null}
+      ${report && trusted !== null ? html`<${Understanding} report=${report} trusted=${trusted} onOpen=${open} opening=${opening} source=${source} />` : null}
     </div>
   <//>`;
 }

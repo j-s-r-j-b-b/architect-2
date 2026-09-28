@@ -115,3 +115,15 @@
 .route-error { max-width: 640px; margin: 80px auto; padding: 24px; }
 .route-error pre { white-space: pre-wrap; font-size: 12px; background: var(--bg-sunken); padding: 12px; border-radius: var(--radius); color: var(--red-ink); overflow: auto; max-height: 240px; }
 .demo-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; font-size: var(--fs-xs); background: var(--amber-soft); color: var(--amber-ink); border-bottom: 1px solid var(--amber-line); }
+
+/* Review polish: provider buttons (Button wraps children in one span), sign-in context + recap, composer hint on phones */
+.auth__provider > span:not(.btn__spinner) { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.auth__provider > span > .grow { flex: 1; text-align: center; }
+.auth__reason { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); font-size: var(--fs-sm); color: var(--text-2); line-height: 1.45; }
+.auth__reason > svg { flex-shrink: 0; margin-top: 2px; color: var(--blueprint); }
+.auth__reason b { color: var(--text); font-weight: 600; }
+.auth__recap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px; margin-bottom: 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); font-size: var(--fs-sm); color: var(--text); }
+.auth__recap-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.auth__recap-item > svg { color: var(--blueprint); }
+.auth__recap-note { flex-basis: 100%; font-size: var(--fs-xs); color: var(--text-3); }
+@media (max-width: 560px) { .promptbox__hint { display: none; } }

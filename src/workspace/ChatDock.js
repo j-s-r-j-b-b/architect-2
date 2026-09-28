@@ -20,6 +20,11 @@ export function revealChat() {
 function suggestionsFor(p) {
   if (isPreBuild(p)) return ['Add a weekly summary email', 'Make it work on phones first', 'What will this cost to run?'];
   const out = ['Make the header navy'];
+  // Surface the "why" explainer with a question about this app's own data.
+  for (const t of p.data?.tables || []) {
+    const c = (t.columns || []).find((x) => x.type === 'status' && x.options?.length > 1);
+    if (c) { out.push(`Why is this ${String(t.name).toLowerCase().replace(/ies$/, 'y').replace(/s$/, '')} ${String(c.options[c.options.length - 1]).toLowerCase()}?`); break; }
+  }
   if (p.agents[0]) out.push(`What does ${p.agents[0].name} do?`);
   out.push('Add a chart of this week’s results');
   return out;

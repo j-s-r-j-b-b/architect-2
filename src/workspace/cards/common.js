@@ -5,7 +5,7 @@ import { Icon, Badge, toast } from '../../ui/index.js';
 import { cx, timeAgo, fmtTime } from '../../lib/util.js';
 import { openConnectSheet } from '../../shells/ConnectSheet.js';
 import { sendMessage } from '../../engine/conversation.js';
-import { openPanel } from '../bus.js';
+import { openPanel, previewState } from '../bus.js';
 import { getProject } from '../../lib/store.js';
 
 /**
@@ -34,7 +34,11 @@ export function runAction(projectId, a, msg) {
   else if (a.kind === 'connect') openConnectSheet(a.id, { projectId }).then((ok) => { if (ok) toast('Connected — tables that read from it now show live data', { tone: 'success' }); });
   else if (a.kind === 'nav') navigate(a.href);
   else if (a.kind === 'panel') openPanel(a.panel);
-  else if (typeof a.onClick === 'function') a.onClick();
+  else if (a.kind === 'xray') {
+    previewState.value = { ...previewState.value, mode: 'xray' };
+    if (!/\/app(\/|$)/.test(location.pathname)) navigate(`/p/${projectId}/app`);
+    toast('X-ray is on — click any block to see its data, agent and code', { tone: 'info' });
+  } else if (typeof a.onClick === 'function') a.onClick();
 }
 
 export function ActionChips({ projectId, actions = [], msg }) {

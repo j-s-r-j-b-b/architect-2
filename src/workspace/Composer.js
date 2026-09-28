@@ -1,7 +1,7 @@
 // Chat composer: autosizing input, + menu, @-mentions, context chip, mode / model / run-mode
 // controls, live cost hint and a queue while a run is going.
 import { html, useState, useEffect, useRef, useMemo } from '../lib/html.js';
-import { updateProject } from '../lib/store.js';
+import { updateProject, connections } from '../lib/store.js';
 import { navigate } from '../lib/router.js';
 import { cx, fmtRange } from '../lib/util.js';
 import { Icon, IconButton, Segmented, Menu, Badge, toast } from '../ui/index.js';
@@ -38,7 +38,14 @@ function mentionables(p) {
     ...(p.screens || []).map((s) => ({ icon: 'layout-dashboard', label: s.title || s.name, sub: `Screen${s.route ? ` · ${s.route}` : ''}` })),
     ...(p.data?.tables || []).map((t) => ({ icon: 'database', label: t.name, sub: 'Table' })),
     ...(p.integrations || []).map((i) => ({ icon: 'plug', label: integrationById(i.id)?.name || i.id, sub: 'Integration' })),
+    ...mcpServers(p).map((m) => ({ icon: 'server', label: `mcp:${m}`, sub: 'MCP server' })),
   ].filter((x) => x.label);
+}
+function mcpServers(p) {
+  const names = new Set();
+  for (const m of connections.value?.mcp || []) names.add(String(m.name || m.id).replace(/\s+/g, '-'));
+  for (const a of p.agents || []) for (const t of a.tools || []) if (t.mcp) names.add(String(t.name || t.id).replace(/\s+/g, '-'));
+  return [...names].filter(Boolean);
 }
 
 export function Composer({ project }) {
@@ -84,11 +91,11 @@ export function Composer({ project }) {
   const setSetting = (patch) => updateProject(project.id, (d) => { Object.assign(d.settings, patch); }, { touch: false });
 
   // ---------- mentions ----------
-  const all = useMemo(() => mentionables(project), [project.agents, project.screens, project.data, project.integrations]);
+  const all = useMemo(() => mentionables(project), [project.agents, project.screens, project.data, project.integrations, connections.value]);
   const list = mention ? all.filter((x) => x.label.toLowerCase().includes(mention.q.toLowerCase())).slice(0, 8) : [];
   const detectMention = (el) => {
     const pos = el.selectionStart ?? el.value.length;
-    const m = el.value.slice(0, pos).match(/(^|\s)@([\w-]*)$/);
+    const m = el.value.slice(0, pos).match(/(^|\s)@([\w:-]*)$/);
     setMention(m ? { q: m[2], start: pos - m[2].length - 1, idx: 0 } : null);
   };
   const insertMention = (item) => {
@@ -128,16 +135,24 @@ export function Composer({ project }) {
     try { await connectGitHub(); toast('GitHub connected — push your code from the GitHub menu', { tone: 'success' }); } catch (err) { toast('GitHub connection was cancelled', { tone: 'warn' }); }
   };
 
+  const insertText = (s) => { setText((t) => (t && !/\s$/.test(t) ? `${t} ${s}` : `${t}${s}`)); focusEnd(); };
+  const testOn = project.settings.testAfterBuild !== false;
   const plusItems = [
+    { section: 'Add context' },
     { label: 'Attach files', icon: 'paperclip', desc: 'Docs, screenshots or CSVs for context', onClick: () => fileRef.current && fileRef.current.click() },
-    { label: 'Change theme', icon: 'palette', onClick: () => navigate(`/p/${project.id}/plan/design`) },
-    { divider: true },
+    { label: 'Mention a part of the app', icon: 'at-sign', desc: 'Agents, screens, tables — or @mcp: tools', onClick: () => { insertText('@'); setTimeout(() => ta.current && detectMention(ta.current), 80); } },
+    { label: 'Prompt library', icon: 'book-open', desc: 'Proven prompts and starter apps', onClick: () => navigate('/templates') },
+    { section: 'Connect' },
     { label: 'Connect an integration', icon: 'plug', desc: 'Gmail, HubSpot, Slack…', onClick: () => openIntegrationPicker(project.id) },
     { label: 'Add MCP server', icon: 'server', onClick: () => openMcpDialog(project.id) },
     { label: 'Connect GitHub', icon: 'github', onClick: ghConnect },
     { label: 'Import code or a design', icon: 'download', onClick: () => navigate('/start/import') },
+    { section: 'Build settings' },
+    { label: 'Change theme', icon: 'palette', onClick: () => navigate(`/p/${project.id}/plan/design`) },
+    { label: testOn ? 'Test after each build · On' : 'Test after each build · Off', icon: 'flask', active: testOn, desc: testOn ? 'Tests + promise checks run after every change' : 'Faster, but promises aren’t re-checked', onClick: () => { setSetting({ testAfterBuild: !testOn }); toast(testOn ? 'Tests off — changes run faster but promises aren’t re-checked' : 'Tests on — every change is checked against your promises', { tone: 'info' }); } },
   ];
-  const placeholder = answering ? 'Answer the questions above…' : busy ? 'Queue a message for after this run…' : mode === 'ask' ? 'Ask anything about your app…' : 'Describe a change, or ask anything…';
+  const queues_ = busy && mode !== 'ask';
+  const placeholder = answering ? 'Answer the questions above…' : queues_ ? 'Queue a change, or ask a question…' : mode === 'ask' ? 'Ask anything about your app — nothing changes…' : 'Describe a change, or ask anything…';
 
   return html`<div class="ws-comp">
     <div class=${cx('ws-comp__box', mode === 'ask' && 'is-ask', mode === 'plan' && 'is-plan')}>
@@ -165,8 +180,8 @@ export function Composer({ project }) {
         <${Menu} align="top-start" width=${270} items=${[{ section: 'When I make changes' }, ...RUN_MODES.map((r) => ({ label: r.label, icon: r.icon, desc: r.desc, active: r.id === runMode.id, onClick: () => setSetting({ runMode: r.id }) })), { divider: true }, { section: 'Deleting or overwriting always asks first' }]}
           trigger=${(o, toggle) => html`<button type="button" class=${cx('ws-comp__pick', o && 'is-open')} onClick=${toggle} data-tip=${runMode.label} aria-label=${`Run mode: ${runMode.label}`}><${Icon} name=${runMode.icon} size=${13} /></button>`} />
         <span class="grow"></span>
-        <button type="button" class="ws-send" disabled=${!text.trim()} onClick=${send} aria-label=${busy ? 'Queue message' : 'Send'} data-tip=${busy ? 'Queue (runs after this one)' : 'Send (Enter)'}>
-          <${Icon} name=${busy ? 'clock' : 'arrow-up'} size=${15} stroke=${2.4} />
+        <button type="button" class="ws-send" disabled=${!text.trim()} onClick=${send} aria-label=${queues_ ? 'Queue message' : 'Send'} data-tip=${queues_ ? 'Queue (runs after this one)' : 'Send (Enter)'}>
+          <${Icon} name=${queues_ ? 'clock' : 'arrow-up'} size=${15} stroke=${2.4} />
         </button>
       </div>
     </div>

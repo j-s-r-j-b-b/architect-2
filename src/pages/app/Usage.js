@@ -16,6 +16,10 @@ export default function Usage() {
   const saved = w.ledger.filter((e) => e.free).reduce((n, e) => n + (e.listed || 0), 0);
   const totals = {};
   for (const e of w.ledger) if (e.phase !== 'topup') totals[e.phase] = (totals[e.phase] || 0) + (e.amount || 0);
+  const byApp = {};
+  for (const e of w.ledger) if (e.phase !== 'topup' && e.projectId) byApp[e.projectId] = (byApp[e.projectId] || 0) + (e.amount || 0);
+  const apps = Object.entries(byApp).sort((a, b) => b[1] - a[1]);
+  const maxA = Math.max(1, ...apps.map((a) => a[1]));
   const maxT = Math.max(1, ...Object.values(totals));
   const pct = Math.round((w.balance / Math.max(1, Math.max(w.monthly, w.balance))) * 100);
   const reset = new Date(w.cycleStart || Date.now()); reset.setMonth(reset.getMonth() + 1);
@@ -42,6 +46,10 @@ export default function Usage() {
       <section class="ap-panel">
         <h2 class="t-md t-strong mb-12">By phase</h2>
         ${Object.keys(totals).length ? Object.entries(totals).sort((a, b) => b[1] - a[1]).map(([k, v]) => html`<div class="ap-phase"><span class="t-sm grow">${PHASES[k] || k}</span><span class="ap-phase__bar"><span style=${{ width: `${(v / maxT) * 100}%` }}></span></span><span class="t-sm t-tabular t-strong">${fmtNumber(v)}</span></div>`) : html`<div class="t-sm t-muted">Nothing spent yet. Planning and quotes are always free.</div>`}
+        <h2 class="t-md t-strong mt-24 mb-12">By app</h2>
+        ${apps.length ? apps.map(([id, v]) => html`<div class="ap-phase"><a class="t-sm grow t-truncate link" href=${`/p/${id}/insights`} title="Open this app’s usage in Insights">${projects.value[id]?.name || 'Deleted project'}</a><span class="ap-phase__bar"><span style=${{ width: `${(v / maxA) * 100}%` }}></span></span><span class="t-sm t-tabular t-strong">${fmtNumber(v)}</span></div>`)
+          : html`<div class="t-sm t-muted">No app has spent credits yet.</div>`}
+        ${(() => { const ex = Object.values(projects.value || {}).filter((p) => p?.sample && !p.deletedAt); return ex.length ? html`<div class="t-xs t-faint mt-12 row gap-4"><${Icon} name="flask" size=${12} />${ex.map((p) => p.name).join(', ')} ${ex.length === 1 ? 'is an example' : 'are examples'} — built for you at no cost. ${ex.length === 1 ? 'Its' : 'Their'} receipt shows what a real build would cost.</div>` : null; })()}
       </section>
       <section class="ap-panel">
         <div class="row gap-8 mb-12 wrap"><h2 class="t-md t-strong grow">Ledger</h2>${['all', ...Object.keys(PHASES)].filter((k) => k === 'all' || w.ledger.some((e) => e.phase === k)).map((k) => html`<button class=${cx('chip chip--sm', phase === k && 'is-active')} onClick=${() => setPhase(k)}>${k === 'all' ? 'All' : PHASES[k]}</button>`)}</div>

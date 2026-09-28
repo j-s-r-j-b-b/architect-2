@@ -217,6 +217,32 @@ export function interpretEdit(project, text, ctx = {}) {
     return I(p, 'fix', { summary: tb ? `Fix ${titleOf(tb.block)}` : 'Fix the reported problem', plain: `I’ll trace the problem${tb ? ` in **${titleOf(tb.block)}**` : ''}, repair broken bindings and layout, and re-run the tests.`, technical: tb ? `${tb.block.file} · rebind + repack · tests` : 'app/** · integrity check · tests', credits: credits(p, 1, 3), touches: tb ? [tb.block.id] : [], apply: heal });
   }
 
+  // 2b. Agent boundaries: "make the qualifier ask before emailing anyone", "never refund without my approval"
+  const bnd = l.match(/\b(?:ask(?:s)?(?: me| a human| someone| us| first)?|check(?:s)? with (?:me|us|a human)|get(?:s)? (?:my |an? )?(?:approval|ok|okay|sign-?off)|need(?:s)? (?:my |an? )?(?:approval|ok)|wait(?:s)? for (?:my )?(?:approval|ok))\s+(?:first\s+)?before\s+(.+)$/)
+    || l.match(/\b(?:never|don'?t|do not|must not|shouldn'?t)\s+(?:ever\s+)?(.+?)\s+without\s+(?:first\s+)?(?:asking|approval|my (?:ok|okay|approval|permission)|permission|checking|confirming|a human)/);
+  const bAg = bnd && (findAgent(p, l) || (sel?.blockId && agentById(p, findBlock(p, sel.blockId)?.block?.bind?.agent)) || p.agents.find((a) => a.kind !== 'manager') || p.agents[0]);
+  if (bnd && bAg) {
+    // "never delete leads without asking" → "deleting leads"
+    const gerund = (s) => s.replace(/^([a-z]+)\b/i, (w) => (/ing$/i.test(w) ? w : /[^e]e$/i.test(w) ? `${w.slice(0, -1)}ing` : `${w}ing`));
+    const phrase = clean(fromRaw(raw, bnd[1])).replace(/[.!?]+$/, '');
+    const what = (/^(never|don|do not|must not|shouldn)/.test(bnd[0]) ? gerund(phrase) : phrase) || 'acting';
+    const VERBS = [[/messag|post|slack|teams|\bdm\b|text|sms|whatsapp|notif/, /post_message|send_message|send_sms|notify/, 'post_message'], [/e-?mail|mail|repl(?:y|ies)|respond|send/, /send_e?mail|send_mail|create_draft|reply|send/, 'send_email'],
+      [/book|schedul|calendar|invite/, /create_event|book/, 'create_event'], [/delet|remov/, /delete|remove/, 'delete_record'], [/pay|refund|charg|invoice/, /refund|charge|invoice|pay/, 'issue_refund'], [/updat|chang|edit|writ|creat|add|mov/, /update|create|append|write/, 'update_record']];
+    const hit = VERBS.find(([re]) => re.test(what));
+    const acts = (bAg.tools || []).flatMap((t) => t.actions || []);
+    let add = hit ? acts.filter((a) => hit[1].test(a)) : [];
+    if (!add.length) add = [hit ? hit[2] : snakeKey(what).slice(0, 40)];
+    const rule = `Always ask a person to approve before ${what}.`;
+    const touches = allBlocks(p).filter(({ block }) => block.bind?.agent === bAg.id).map(({ block }) => block.id);
+    return I(p, 'editAgent', { summary: `${bAg.name} asks before ${what}`, plain: `I’ll add a boundary to **${bAg.name}**: it must ask a person before ${what}. It pauses, shows exactly what it wants to do, and waits for **Approve** or **Reject**. It becomes version ${(bAg.version || 1) + 1}; the old one stays in history.`, technical: `agents/${snakeKey(bAg.name)}.yaml · approvals += [${add.join(', ')}] · v${(bAg.version || 1) + 1}`, credits: credits(p, 0.5, 1), touches,
+      apply: (d) => {
+        const a = d.agents.find((x) => x.id === bAg.id); if (!a) return;
+        a.approvals = uniq([...(a.approvals || []), ...add]);
+        if (!a.instructions.includes(rule)) a.instructions = `${a.instructions.trim()} ${rule}`;
+        a.version = (a.version || 1) + 1; a.evalScore = null;
+      } });
+  }
+
   // 3. Include a deferred promise
   const ps = p.plan?.promises || [];
   const pid = (raw.match(/\bP(\d{1,2})\b/i) || [])[0]?.toUpperCase();
@@ -224,7 +250,9 @@ export function interpretEdit(project, text, ctx = {}) {
   const deferred = ps.filter((x) => x.status === 'deferred');
   const byInt = ints.length && /\b(alert|notify|post|send|include|enable|add|turn on|message)\b/.test(l) ? deferred.find((x) => ints.some((i) => lc(x.title + ' ' + (x.deferredReason || '')).includes(lc(integrationById(i).name)))) : null;
   const byWords = /\b(include|enable|add|turn on|do|build)\b/.test(l) ? deferred.find((x) => lc(x.title).split(/\W+/).filter((w) => w.length > 4).filter((w) => l.includes(w)).length >= 2) : null;
-  const pr = (pid && ps.find((x) => x.id === pid)) || byInt || byWords;
+  // "add an agent that posts to Slack" asks for a NEW agent, not a deferred promise that happens to mention Slack
+  const newAgentAsk = /\b(?:add|create|build|hire|set up|make)\s+(?:a|an|another|new)\s+(?:new )?(?:ai )?(?:[\w-]+ ){0,2}?(?:agent|assistant|bot|copilot|worker)\b/.test(l);
+  const pr = (pid && ps.find((x) => x.id === pid)) || (!newAgentAsk && (byInt || byWords));
   if (pr && pr.status === 'deferred') {
     return I(p, 'promise', { summary: `Include ${pr.id}: ${pr.title}`, plain: `I’ll add **${pr.id} — ${pr.title}** to the plan (≈${range(pr.cost)} credits).${pr.deferredReason && /needs/i.test(pr.deferredReason) ? ` ${pr.deferredReason.split('—')[0].trim()} first.` : ''}`, technical: `plan.promises.${pr.id}.status: deferred → planned`, credits: pr.cost || credits(p, 2, 4), extra: { promiseId: pr.id }, apply: (d) => { const x = d.plan.promises.find((y) => y.id === pr.id); if (x) { x.status = 'planned'; delete x.deferredReason; } } });
   }
@@ -273,9 +301,13 @@ export function interpretEdit(project, text, ctx = {}) {
     const id = `a_${snakeKey(nm)}_${(p.agents.length + 1)}`;
     const scr = screenFor(p, l, sel), bid = `b_${id.replace(/^a_/, '')}_chat`;
     const tbl = mainTable(p);
-    return I(p, 'addAgent', { summary: `Add ${nm}`, plain: `I’ll add **${nm}**, an agent ${link} ${purpose.replace(/^to /, '')}. It starts as a draft with safe limits, reads ${tbl ? tbl.name : 'your data'}, and gets a chat panel on ${scr.title}.`, technical: `agents/${snakeKey(nm)}.yaml · components/${pascal(nm)}Chat.tsx · manager.delegatesTo += ${id}`, credits: credits(p, 4, 7), touches: [bid],
+    // Schedules and output tools named in the ask ("…a weekly summary to Slack") become real triggers/tools; sending asks first
+    const sched = /\b(weekly|every week|each week|mondays?|fridays?)\b/.test(l) ? (/friday/.test(l) ? 'Every Friday at 16:00' : 'Every Monday at 9:00') : /\b(daily|every (?:day|morning)|each morning|nightly)\b/.test(l) ? 'Daily at 9:00' : /\b(hourly|every hour)\b/.test(l) ? 'Every hour' : null;
+    const outTool = ints.map((i) => { const it = integrationById(i); const act = (it.actions || []).find((a) => /post|send|create|append|draft/.test(a)); return act ? [i, act, it.name] : null; }).find(Boolean);
+    const extras = [sched ? `runs ${sched.toLowerCase()}` : null, outTool ? `posts through ${outTool[2]} (asking you first)` : null].filter(Boolean);
+    return I(p, 'addAgent', { summary: `Add ${nm}`, plain: `I’ll add **${nm}**, an agent ${link} ${purpose.replace(/^to /, '')}. It starts as a draft with safe limits, reads ${tbl ? tbl.name : 'your data'}${extras.length ? `, ${listJoin(extras)}` : ''}, and gets a chat panel on ${scr.title}.`, technical: `agents/${snakeKey(nm)}.yaml · components/${pascal(nm)}Chat.tsx · manager.delegatesTo += ${id}`, credits: credits(p, 4, 7), touches: [bid],
       apply: (d) => {
-        const a = mkAgent({ autonomy: 'ask', tier: d.settings?.modelTier || 'balanced' }, { id, name: nm, role: cap(purpose.replace(/^to /, '')), goal: cap(purpose.replace(/^to /, '')), instructions: `${cap(purpose.replace(/^to /, ''))}. Only use the ${tbl ? tbl.name : 'app'} data and say which records you used. Keep answers short and never take an irreversible action without asking.`, knowledge: tbl ? [['table', tbl.name, `${tbl.rows.length} rows`]] : [], tools: [], triggers: [['chat', `${nm} panel`]] }, d.agents.length);
+        const a = mkAgent({ autonomy: 'ask', tier: d.settings?.modelTier || 'balanced' }, { id, name: nm, role: cap(purpose.replace(/^to /, '')), goal: cap(purpose.replace(/^to /, '')), instructions: `${cap(purpose.replace(/^to /, ''))}. Only use the ${tbl ? tbl.name : 'app'} data and say which records you used. Keep answers short and never take an irreversible action without asking.`, knowledge: tbl ? [['table', tbl.name, `${tbl.rows.length} rows`]] : [], tools: outTool ? [[outTool[0], [outTool[1]]]] : [], risky: outTool ? [outTool[1]] : [], triggers: [['chat', `${nm} panel`], ...(sched ? [['schedule', sched]] : [])] }, d.agents.length);
         a.usedBy = [scr.id]; d.agents.push(a);
         const mgr = d.agents.find((x) => x.kind === 'manager'); if (mgr) mgr.delegatesTo = uniq([...(mgr.delegatesTo || []), id]);
         const s = d.screens.find((x) => x.id === scr.id) || d.screens[0];
@@ -316,6 +348,48 @@ export function interpretEdit(project, text, ctx = {}) {
           t.columns.push(c); t.rows.forEach((r, i) => { r[key] = sampleValue(type, key, i, r); });
           for (const s of d.screens) for (const b of s.blocks) if (b.bind?.table === t.id) { if (b.type === 'table' && Array.isArray(b.props?.columns) && b.props.columns.length) b.props.columns.push(key); if (b.type === 'form' && Array.isArray(b.props?.fields)) b.props.fields.push(...fieldsFrom(t, [key])); }
         } });
+    }
+  }
+
+  // 8b. Table tweaks: "add a filter by owner", more sample rows, CSV export button
+  const tableBlocks = allBlocks(p).filter(({ block }) => block.type === 'table' && block.bind?.table);
+  const selTable = sel?.blockId ? tableBlocks.find(({ block }) => block.id === sel.blockId) : null;
+  const fm = l.match(/\bfilters?\s+(?:by|for|on)\s+(?:the\s+)?([a-z][\w ]*?)(?:\s+(?:to|on|in|for)\b.*)?$/) || l.match(/\blet (?:me|us|people) filter (?:\w+ )*?by\s+([a-z][\w ]*?)(?:\s+(?:to|on|in)\b.*)?$/);
+  if (fm && tableBlocks.length) {
+    const want = fm[1].trim().replace(/s$/, '');
+    const cands = selTable ? [selTable, ...tableBlocks] : tableBlocks;
+    for (const tb2 of cands) {
+      const t = tableById(p, tb2.block.bind.table);
+      const c = t?.columns.find((x) => lc(x.label).replace(/s$/, '') === want || x.key === snakeKey(want) || lc(x.label).startsWith(want));
+      if (!c) continue;
+      if ((tb2.block.props?.filters || []).includes(c.key)) return I(p, 'question', { summary: 'Filter exists', credits: [0, 0], extra: { answer: `**${titleOf(tb2.block)}** can already be filtered by ${c.label}.` } });
+      return I(p, 'layout', { summary: `Filter ${titleOf(tb2.block)} by ${c.label}`, plain: `I’ll add a **${c.label}** filter to **${titleOf(tb2.block)}** on ${tb2.screen.title}. It lists every ${lc(c.label)} in ${t.name}.`, technical: `${tb2.block.file || 'components/Table.tsx'} · props.filters += ${c.key}`, credits: credits(p, 0.5, 1), touches: [tb2.block.id],
+        apply: (d) => { const f = inDraft(d, tb2.block.id); if (f) f.b.props = { ...f.b.props, filters: uniq([...(f.b.props?.filters || []), c.key]) }; } });
+    }
+  }
+  const more = l.match(/\b(?:add|generate|create|make|seed|give me)\s+(\d{1,3}|a few|some|more)\s+(?:more\s+)?(?:sample |fake |test |dummy |example |demo )?([a-z][a-z ]*?)\s*(?:rows?|records?|entries|data)?$/);
+  const moreTbl = more && (findTable(p, more[2]) || (/\b(rows?|records?|sample|data|entries)\b/.test(l) && (selTable ? tableById(p, selTable.block.bind.table) : mainTable(p))));
+  if (more && moreTbl && moreTbl.rows?.length) {
+    const n = Math.max(1, Math.min(40, /^\d+$/.test(more[1]) ? Number(more[1]) : 5));
+    return I(p, 'data', { summary: `Add ${n} sample rows to ${moreTbl.name}`, plain: `I’ll add **${n} more sample ${lc(moreTbl.name)}**, mixed from realistic values, so lists, charts and agents have more to work with. They stay marked as sample data.`, technical: `db: INSERT ${n} rows INTO ${moreTbl.id} (seed)`, credits: [0, 0.5],
+      apply: (d) => {
+        const t = d.data.tables.find((x) => x.id === moreTbl.id); if (!t?.rows.length) return;
+        const base = t.rows.slice(), tk = t.columns.find((c) => c.type === 'text')?.key;
+        for (let i = 0; i < n; i++) {
+          const r = {};
+          t.columns.forEach((c, j) => { r[c.key] = base[(i * (j + 3) + j + 1) % base.length][c.key]; });
+          if (tk) { const a = String(base[i % base.length][tk] || '').split(' '), b = String(base[(i + 5) % base.length][tk] || '').split(' '); if (a.length > 1 && b.length > 1) r[tk] = `${a[0]} ${b[b.length - 1]}`; }
+          r.id = `${t.id.slice(0, 2)}_m${Date.now().toString(36)}${i}`;
+          t.rows.push(r);
+        }
+      } });
+  }
+  if (/\b(export|download)\b/.test(l) && /\b(csv|excel|spreadsheet|button)\b/.test(l) && tableBlocks.length) {
+    const tb2 = selTable || tableBlocks.find(({ screen }) => screen.blocks.some((b) => b.type === 'header')) || tableBlocks[0];
+    const hdr = tb2.screen.blocks.find((b) => b.type === 'header');
+    if (hdr && !(hdr.props?.actions || []).some((a) => /export/i.test(a.label))) {
+      return I(p, 'addBlock', { summary: `Add an Export CSV button to ${tb2.screen.title}`, plain: `I’ll add an **Export CSV** button to the ${tb2.screen.title} header. It downloads what’s in **${titleOf(tb2.block)}**, with the current filters.`, technical: `${routeFile(tb2.screen.route)} · header.actions += Export CSV`, credits: credits(p, 0.5, 1), touches: [hdr.id],
+        apply: (d) => { const f = inDraft(d, hdr.id); if (f) f.b.props = { ...f.b.props, actions: [{ label: 'Export CSV', variant: 'secondary', icon: 'download' }, ...(f.b.props?.actions || [])] }; } });
     }
   }
 
@@ -412,7 +486,9 @@ export function interpretEdit(project, text, ctx = {}) {
   const named = Object.keys(COLORS).find((c) => new RegExp(`\\b${c}\\b`).test(l));
   const preset = THEME_PRESETS.find((t) => new RegExp(`\\b${lc(t.name)}\\b`).test(l) && /\b(theme|preset|style|look)\b/.test(l));
   const themeWords = /\b(colou?rs?|theme|dark mode|dark theme|light mode|light theme|darker|lighter|brand|accent|primary|rounder|rounded|round|corners|radius|sharper|square|font|serif|typeface|compact|denser|spacious|roomier|palette|dark|light)\b/;
-  if (hex || named || preset || themeWords.test(l)) {
+  // Colour words aimed at data ("a green badge for 80+", "colour the status column") are not theme changes.
+  const aboutData = /\b(columns?|badges?|rows?|cells?|thresholds?|status(?:es)?|scores?|tags?|chips?|values?|labels?)\b/.test(l) && !/\b(theme|brand|primary|accent|header|sidebar|navbar|background|whole app|everything)\b/.test(l);
+  if (!aboutData && (hex || named || preset || themeWords.test(l))) {
     const ch = {}; const said = [];
     const target = /\b(accent|buttons?|highlights?|links?|secondary)\b/.test(l) ? 'accent' : 'primary';
     if (preset) { Object.assign(ch, { preset: preset.id, primary: preset.primary, accent: preset.accent, radius: preset.radius, font: preset.font, mode: preset.dark ? 'dark' : 'light' }); said.push(`switch to the ${preset.name} theme`); }
@@ -425,7 +501,10 @@ export function interpretEdit(project, text, ctx = {}) {
     if (/\b(sharper|square|squarer|boxy)\b/.test(l)) { ch.radius = Math.max(2, r0 - 4); said.push(`sharpen the corners (${r0} → ${ch.radius}px)`); }
     if (/\b(compact|denser|tighter)\b/.test(l)) { ch.density = 'compact'; said.push('use compact spacing'); }
     if (/\b(spacious|roomier|airier|comfortable)\b/.test(l)) { ch.density = 'comfortable'; said.push('use roomier spacing'); }
-    if (/\bserif\b/.test(l) && !/sans/.test(l)) { ch.font = 'Instrument Serif'; said.push('use a serif font for headings'); } else if (/\bsans\b|modern font/.test(l)) { ch.font = 'Geist'; said.push('use a clean sans-serif font'); }
+    const FONTS = ['Inter', 'Geist', 'Roboto', 'Poppins', 'Manrope', 'DM Sans', 'IBM Plex Sans', 'Space Grotesk', 'Work Sans', 'Nunito', 'Outfit', 'Lato', 'Open Sans', 'Instrument Serif', 'Playfair Display', 'Lora', 'Merriweather', 'Fraunces', 'JetBrains Mono', 'IBM Plex Mono'];
+    const namedFont = FONTS.find((f) => new RegExp(`\\b${lc(f)}\\b`).test(l));
+    if (namedFont) { ch.font = namedFont; said.push(`use ${namedFont} for the app’s text`); }
+    else if (/\bserif\b/.test(l) && !/sans/.test(l)) { ch.font = 'Instrument Serif'; said.push('use a serif font for headings'); } else if (/\bsans\b|modern font/.test(l)) { ch.font = 'Geist'; said.push('use a clean sans-serif font'); }
     if (said.length) {
       return I(p, 'theme', { summary: cap(said[0]), plain: `I’ll ${listJoin(said)}. Every screen updates at once.`, technical: `styles/theme.css · ${Object.entries(ch).map(([k, v]) => `--${k}: ${v}`).join('; ')}`, credits: credits(p, 0.5, 1.5), touches: p.screens[0]?.blocks.slice(0, 2).map((b) => b.id) || [],
         apply: (d) => {

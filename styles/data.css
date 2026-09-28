@@ -72,3 +72,13 @@
   .dt-grid-wrap { max-height: 60vh; }
   .dt-actions-col .icon-btn { opacity: 1; }
 }
+
+/* Ask your data (plain words → SQL) */
+.dt-ask { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
+.dt-ask:focus-within { border-color: var(--blueprint); box-shadow: 0 0 0 3px var(--focus-ring); }
+.dt-ask__icon { color: var(--violet); flex: none; }
+.dt-ask__input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--fs-md); padding: 6px 0; }
+.dt-ask__input::placeholder { color: var(--text-4); }
+.dt-said { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius); background: var(--violet-soft); color: var(--violet-ink); font-size: var(--fs-sm); }
+.dt-uses__agent { color: var(--text); text-decoration: none; }
+.dt-uses__agent:hover span:first-of-type { color: var(--blueprint); text-decoration: underline; text-underline-offset: 3px; }

@@ -59,7 +59,7 @@ function EnvPill({ project }) {
   ];
   return html`<${Menu} align="bottom-start" width=${280} items=${items}
     trigger=${(o, toggle) => html`<button type="button" class=${cx('ws-env', o && 'is-open')} onClick=${toggle} aria-haspopup="menu" data-tip="Environment">
-      <span class=${cx('ws-env__dot', prod && 'is-live')}></span>Draft<${Icon} name="chevron-down" size=${12} />
+      <span class=${cx('ws-env__dot', prod && 'is-live')}></span>Draft${prod ? html`<span class="ws-env__live"> · Live v${prod.version}</span>` : null}<${Icon} name="chevron-down" size=${12} />
     </button>`} />`;
 }
 
@@ -74,7 +74,8 @@ function Chips({ project }) {
   if (ps.total) chips.push({ id: 'plan', icon: 'list-checks', label: `Promises ${ps.verified}/${ps.total}`, tone: ps.failed ? 'red' : ps.verified === ps.total ? 'green' : 'blueprint', tip: `${ps.verified} of ${ps.total} promises verified${ps.deferred ? ` · ${ps.deferred} deferred` : ''}` });
   if (project.agents.length) chips.push({ id: 'agents', icon: 'bot', label: `Agents ${project.agents.length}`, tone: 'violet', tip: 'AI agents in this app' });
   if (tables) chips.push({ id: 'data', icon: 'database', label: sample ? 'Data: Sample' : 'Data: Live', tone: sample ? 'amber' : 'green', tip: sample ? `${sample} of ${tables} tables use sample data` : 'All tables read live data' });
-  if (rd?.total) chips.push({ id: 'launch', icon: 'rocket', label: `Ready ${rd.score}/${rd.total}`, tone: rd.score >= rd.total ? 'green' : 'neutral', tip: 'Launch readiness checks' });
+  // Launch readiness only means something once there is an app to launch.
+  if (rd?.total && !isPreBuild(project) && project.status !== 'building') chips.push({ id: 'launch', icon: 'rocket', label: `Launch ${rd.score}/${rd.total}`, tone: rd.score >= rd.total ? 'green' : 'neutral', tip: `${rd.score} of ${rd.total} launch-readiness checks pass — open Launch to fix the rest` });
   if (!chips.length) return null;
   return html`<div class="ws-chips-top">${chips.map((c) => html`<a href=${`${base}/${c.id}`} class=${cx('ws-schip', `ws-schip--${c.tone}`)} data-tip=${c.tip}>
     <${Icon} name=${c.icon} size=${12} /><span>${c.label}</span>

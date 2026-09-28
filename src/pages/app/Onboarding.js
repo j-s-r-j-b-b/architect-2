@@ -1,5 +1,5 @@
 // First-run: "How do you like to work?" — sets defaults only; nothing is locked.
-import { html, useState } from '../../lib/html.js';
+import { html, useState, useEffect } from '../../lib/html.js';
 import { navigate, route } from '../../lib/router.js';
 import { setPrefs, prefs, session } from '../../lib/store.js';
 import { Button, Logo, Icon } from '../../ui/index.js';
@@ -17,6 +17,7 @@ export default function Onboarding() {
   const [experience, setExperience] = useState(prefs.value.experience || 'balanced');
   const [role, setRole] = useState(prefs.value.role || null);
   const first = session.value?.name?.split(' ')[0];
+  useEffect(() => { document.title = 'Welcome · Architect'; }, []);
   const done = (skip) => {
     setPrefs({ experience: skip ? prefs.value.experience : experience, role: skip ? prefs.value.role : role, onboarded: true });
     navigate(route.value.query.next || '/start', { replace: true });

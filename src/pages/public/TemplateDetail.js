@@ -1,7 +1,7 @@
 // "/templates/:id" — read the plan before you commit: prompt, wireframe, promises, agents, data, quote.
 import { html, useMemo, useState } from '../../lib/html.js';
 import { navigate } from '../../lib/router.js';
-import { newProject } from '../../lib/store.js';
+import { newProject, session } from '../../lib/store.js';
 import { Icon, Button, Badge, StatusPill, Empty, Tabs, CopyButton } from '../../ui/index.js';
 import { IntegrationTile } from '../../shells/ConnectSheet.js';
 import { AppRenderer } from '../../genapp/Renderer.js';
@@ -72,7 +72,8 @@ export default function TemplateDetail({ params }) {
   const tables = plan?.data?.tables || [];
   const ints = [...new Set([...(t.integrations || []), ...(plan?.integrations || []).map((i) => i.id)])];
   const use = () => navigate(`/new?template=${t.id}`);
-  const customise = () => navigate(`/start?prompt=${encodeURIComponent(t.prompt)}`);
+  // Signed-out visitors edit the prompt on the landing composer (free, no account); signed-in people use the Start hub.
+  const customise = () => navigate(`${session.value ? '/start' : '/'}?prompt=${encodeURIComponent(t.prompt)}`);
   const related = TEMPLATES.filter((x) => x.category === t.category && x.id !== t.id).slice(0, 3);
 
   return html`<${Frame}>

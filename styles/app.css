@@ -7,6 +7,8 @@
 .ap-grid-4 { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
 .ap-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; }
 .ap-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.ap-toolbar > .grow { flex: 1 1 240px; }
+.ap-toolbar > .select { width: auto; flex: 0 0 auto; min-width: 150px; }
 .mt-auto { margin-top: auto; }
 .ap-tone--amber { background: var(--amber-soft); color: var(--amber-ink); }
 .ap-tone--green { background: var(--green-soft); color: var(--green-ink); }
@@ -117,6 +119,14 @@
 .ap-analyse li.is-done { color: var(--text-2); }
 .ap-analyse li.is-done svg { color: var(--green); }
 .ap-report { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.ap-plain { border-left: 3px solid var(--blueprint); }
+.ap-plain p { line-height: 1.55; color: var(--text); }
+.ap-next { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+.ap-next b { color: var(--text); font-weight: 600; }
+.ap-tourcard { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; transition: border-color .15s, background .15s; }
+.ap-list__row--link { color: inherit; text-decoration: none; }
+.ap-list__row--link:hover { background: var(--surface-hover); }
+.ap-tourcard:hover { border-color: var(--blueprint-line); background: var(--blueprint-soft); }
 .ap-report__wide { grid-column: 1 / -1; }
 .ap-kv { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); }
 .ap-kv li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }

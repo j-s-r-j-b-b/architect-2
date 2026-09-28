@@ -25,7 +25,9 @@ export function genericTopic(text = '') {
   const group = (low.match(GROUP) || [])[1] || null;
   const noun = kitKey || nounsFrom(low).find((n) => !['todo', 'to-do', 'task', 'club', 'group', 'team'].includes(n)) || 'item';
   const ew = entityWords(noun);
-  const name = todo ? `${group ? titleCase(group) + ' ' : ''}To-dos` : group ? `${titleCase(group)} ${ew.Many}` : `${ew.One} Tracker`;
+  // "book club" + books → "Book Club", not "Book Club Books"
+  const groupHasNoun = group && words(group).some((w) => singular(w) === singular(noun));
+  const name = todo ? `${group ? titleCase(group) + ' ' : ''}To-dos` : group ? (groupHasNoun ? titleCase(group) : `${titleCase(group)} ${ew.Many}`) : `${ew.One} Tracker`;
   return { kitKey, todo, group, noun, ew, name };
 }
 

@@ -77,6 +77,7 @@ function CodeMain({ project }) {
   const [termOpen, setTermOpen] = useState(true);
   const q = route.value?.query?.file;
   const sel = files.find((f) => f.path === q) || files.find((f) => f.path === 'README.md') || files[0];
+  const missing = q && sel?.path !== q ? q : null; // a stale or mistyped ?file= deep link
   const onSel = (path) => { setQuery({ file: path }); setShowTree(false); };
   const toggle = (path) => setCollapsed((s) => { const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n; });
   const edited = files.filter((f) => f.edited).length;
@@ -110,9 +111,10 @@ function CodeMain({ project }) {
           ${matches ? (matches.length ? matches.map((f) => html`<button key=${f.path} class=${cx('cd-tree__row', sel?.path === f.path && 'is-sel')} style="padding-left:10px" onClick=${() => onSel(f.path)}><${Icon} name=${fileIcon(f.path)} size=${14} /><span class="t-truncate grow">${f.path}</span>${f.edited ? html`<span class="cd-dot"></span>` : null}</button>`) : html`<div class="t-xs t-faint p-12">No files match “${filter}”</div>`)
             : tree.children.map((c) => html`<${TreeNode} key=${c.path} node=${c} depth=${0} open=${collapsed} toggle=${toggle} sel=${sel?.path} onSel=${onSel} />`)}
         </div>
-        <div class="cd-tree__foot t-xs t-faint">${files.length} files${edited ? html` · <span class="t-amber">${edited} edited</span>` : ''} · Next.js</div>
+        <div class="cd-tree__foot t-xs t-faint">${files.length} files${edited ? html` · <span class="t-amber">${edited} edited</span>` : ''} · ${project.source?.type === 'import' ? 'Imported' : 'Next.js · App Router'}</div>
       </aside>
       <div class="cd-pane">
+        ${missing ? html`<div class="cd-missing t-xs" role="status"><${Icon} name="alert-triangle" size=${13} /><span class="grow"><span class="t-mono">${missing}</span> isn’t in this project — showing <span class="t-mono">${sel?.path}</span>. Use the filter to find a file.</span><button class="link" onClick=${() => setQuery({ file: sel?.path })}>Dismiss</button></div>` : null}
         <div class="cd-scroll" ref=${scrollRef}>${sel ? html`<${Editor} key=${sel.path} project=${project} file=${sel} />` : null}</div>
         <div class=${cx('cd-termwrap', !termOpen && 'is-closed')}>
           <button class="cd-termtoggle" onClick=${() => setTermOpen(!termOpen)} aria-label=${termOpen ? 'Hide terminal' : 'Show terminal'}><${Icon} name=${termOpen ? 'chevron-down' : 'chevron-up'} size=${13} />${termOpen ? '' : html`<span>Terminal</span>`}</button>

@@ -26,6 +26,8 @@ function Cell({ col, value }) {
 }
 
 const numeric = (t) => ['number', 'money', 'percent', 'score', 'date', 'datetime'].includes(t);
+/** Column priority: narrow tables hide p1/p2 columns (CSS container query) and show them in the expanded row instead. */
+const prio = (i) => (i < 2 ? '' : i < 4 ? 'is-p1' : 'is-p2');
 
 export function TableBlock({ block }) {
   const ctx = useGx();
@@ -108,7 +110,7 @@ export function TableBlock({ block }) {
     <div class="gx-tablewrap">
       <table class="gx-table">
         <thead><tr>
-          ${cols.map((c) => html`<th key=${c.key} class=${cx(numeric(c.type) && c.type !== 'datetime' && c.type !== 'date' && 'is-num')} aria-sort=${sort?.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+          ${cols.map((c, i) => html`<th key=${c.key} class=${cx(numeric(c.type) && c.type !== 'datetime' && c.type !== 'date' && 'is-num', prio(i))} aria-sort=${sort?.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
             <button class="gx-th" onClick=${() => toggleSort(c.key)}>${c.label}${sort?.key === c.key ? html`<${Icon} name=${sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} size=${11} />` : null}</button>
           </th>`)}
           ${action ? html`<th class="gx-th-act"><span class="sr-only">Actions</span></th>` : null}
@@ -119,15 +121,16 @@ export function TableBlock({ block }) {
             const run = runner.runs[r.id];
             return html`
               <tr key=${r.id} class=${cx(isOpen && 'is-open')} onClick=${() => setOpen(isOpen ? null : r.id)} tabindex="0" onKeyDown=${(e) => { if (e.key === 'Enter') setOpen(isOpen ? null : r.id); }}>
-                ${cols.map((c) => html`<td key=${c.key} class=${cx(numeric(c.type) && c.type !== 'datetime' && c.type !== 'date' && 'is-num')}><${Cell} col=${c} value=${r[c.key]} /></td>`)}
+                ${cols.map((c, i) => html`<td key=${c.key} class=${cx(numeric(c.type) && c.type !== 'datetime' && c.type !== 'date' && 'is-num', prio(i))}><${Cell} col=${c} value=${r[c.key]} /></td>`)}
                 ${action ? html`<td class="gx-td-act">
-                  <button class=${cx('gx-rowact', run?.status === 'running' && 'is-busy')} onClick=${(e) => runAction(r, e)} disabled=${run?.status === 'running'} title=${actionAgent ? `Runs ${actionAgent.name}` : ''}>
+                  <button class=${cx('gx-rowact', run?.status === 'running' && 'is-busy')} onClick=${(e) => runAction(r, e)} disabled=${run?.status === 'running'} aria-label=${action.label} title=${actionAgent ? `${action.label} · runs ${actionAgent.name}` : action.label}>
                     ${run?.status === 'running' ? html`<span class="gx-spin"></span>` : html`<${Icon} name="sparkles" size=${13} />`}<span>${action.label}</span>
                   </button>
                 </td>` : null}
               </tr>
               ${isOpen ? html`<tr class="gx-exp" key=${r.id + '_x'}><td colspan=${colCount}>
                 <div class="gx-exp__grid">
+                  ${cols.map((c, i) => (prio(i) ? html`<div class=${`gx-exp__field gx-exp__only-${prio(i).slice(3)}`} key=${'h_' + c.key}><span>${c.label}</span><div><${Cell} col=${c} value=${r[c.key]} /></div></div>` : null))}
                   ${table.columns.filter((c) => !cols.includes(c)).map((c) => html`<div class=${cx('gx-exp__field', c.type === 'longtext' && 'is-wide')} key=${c.key}><span>${c.label}</span><div><${Cell} col=${{ ...c, type: c.type === 'longtext' ? 'text' : c.type }} value=${r[c.key]} /></div></div>`)}
                 </div>
                 ${run ? html`<${AgentRun} run=${run} agent=${actionAgent} onClose=${() => runner.clear(r.id)} compact />` : null}

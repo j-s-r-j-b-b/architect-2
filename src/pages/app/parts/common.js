@@ -5,10 +5,12 @@ import { StatusPill, Icon, Menu, IconButton, Badge } from '../../../ui/index.js'
 import { promiseStats } from '../../../engine/schema.js';
 import { timeAgo, cx } from '../../../lib/util.js';
 import { Link } from '../../../lib/router.js';
+import { liveUrl as deployUrl } from '../../../engine/deploy.js';
 
 const PRE_BUILD = ['draft', 'planning', 'ready'];
 export const projectHref = (p) => `/p/${p.id}/${PRE_BUILD.includes(p.status) ? 'plan' : 'app'}`;
-export const liveUrl = (p) => (p.status === 'live' ? (p.domain || `architect.space/a/${p.slug}`) : null);
+/** Same address the Launch tab and Inbox show (served here at /a/:slug). */
+export const liveUrl = (p) => (p.status === 'live' ? (p.domain || deployUrl(p).replace(/^https?:\/\//, '')) : null);
 
 export function greeting() {
   const h = new Date().getHours();

@@ -44,6 +44,8 @@ function Environments({ project }) {
   const envs = project.environments || {};
   const [busy, setBusy] = useState(false);
   const draftV = Math.max(0, ...(project.deployments || []).map((d) => d.version || 0)) + 1;
+  const lastPub = Math.max(envs.production?.at || 0, envs.staging?.at || 0);
+  const inSync = lastPub > 0 && (project.updatedAt || 0) - lastPub < 15000; // publishing itself touches updatedAt
   async function promote() {
     const st = envs.staging;
     if (!(await confirmDialog({ title: `Promote v${st.version} to Production?`, body: 'Visitors get exactly what you tested on Staging. The current Production version stays one click away.', confirmLabel: 'Promote' }))) return;
@@ -53,12 +55,14 @@ function Environments({ project }) {
   }
   const card = (key, icon, info, body, action) => html`<div class=${cx('ln-env', info ? 'is-on' : 'is-off', `ln-env--${key}`)}>
     <div class="ln-env__head"><${Icon} name=${icon} size=${16} /><span class="t-strong">${ENV_LABEL[key]}</span><span class="grow"></span>
-      ${info ? html`<${StatusPill} status=${key === 'draft' ? 'draft' : 'live'} />` : html`<${Badge} size="sm" tone="neutral">Empty<//>`}</div>
+      ${key === 'draft' ? html`<${Badge} size="sm" tone="blueprint" icon="pencil">Editing<//>` : info ? html`<${StatusPill} status="live" />` : html`<${Badge} size="sm" tone="neutral">Empty<//>`}</div>
     <div class="ln-env__body">${body}</div>
     <div class="ln-env__foot">${action}</div>
   </div>`;
   return html`<div class="ln-envs">
-    ${card('draft', 'pencil', true, html`<div class="ln-env__v">v${draftV} <span class="t-faint t-sm">(unpublished)</span></div><div class="t-sm t-muted">Edited ${timeAgo(project.updatedAt)} · only you and your team see it in the workspace.</div>`,
+    ${card('draft', 'pencil', true, inSync
+      ? html`<div class="ln-env__v">v${draftV - 1} <span class="t-faint t-sm">(same as ${envs.production?.at >= (envs.staging?.at || 0) ? 'Production' : 'Staging'})</span></div><div class="t-sm t-muted">No changes since the last publish. Edits you make show up here first.</div>`
+      : html`<div class="ln-env__v">v${draftV} <span class="t-faint t-sm">(unpublished)</span></div><div class="t-sm t-muted">Edited ${timeAgo(project.updatedAt)} · only you and your team see it in the workspace.</div>`,
       html`<${Button} size="sm" variant="secondary" icon="flask" onClick=${() => openPublishFlow(project.id, { env: 'staging' })}>Publish to Staging<//>`)}
     <div class="ln-env__arrow"><${Icon} name="arrow-right" size=${16} /></div>
     ${card('staging', 'flask', envs.staging, envs.staging ? html`<div class="ln-env__v">v${envs.staging.version}</div><div class="t-sm t-muted">Published ${timeAgo(envs.staging.at)}</div><a class="link t-sm" href=${envs.staging.url} target="_blank" rel="noopener">${bare(envs.staging.url)}</a>` : html`<div class="t-sm t-muted">A private copy with its own data, for testing before real users see changes.</div>`,

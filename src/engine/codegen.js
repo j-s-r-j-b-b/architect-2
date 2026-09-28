@@ -285,6 +285,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const th = project.theme || {};
   add('app/globals.css', `/* Theme: ${th.preset || 'custom'} */\n:root {\n  --primary: ${th.primary || '#2F5BEA'};\n  --accent: ${th.accent || '#7446F0'};\n  --radius: ${th.radius ?? 10}px;\n  --font: '${th.font || 'Inter'}', system-ui, sans-serif;\n}\nbody { margin: 0; display: flex; font-family: var(--font); }\n.sidebar { width: 220px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }\n.content { flex: 1; padding: 24px; }\n.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }\n.card { border: 1px solid #e5e7eb; border-radius: var(--radius); padding: 16px; }\n`);
   for (const s of screens) add(pageFile(s.route), pageCode(project, s));
+  const home = screens.find((s) => s.nav !== false && !String(s.route).includes(':'));
+  if (home) add('app/page.tsx', `// Home route — sends visitors to the first screen of ${project.name}.\nimport { redirect } from 'next/navigation';\n\nexport default function Home() {\n  redirect(${q(home.route)});\n}\n`);
   for (const s of screens) for (const b of s.blocks || []) {
     const f = blockFile(s, b);
     if (f.startsWith('components/')) add(f, componentCode(project, b, f));

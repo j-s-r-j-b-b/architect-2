@@ -5,6 +5,10 @@ import { singular, plural, titleCase, words } from './text.js';
 /** [integration id, pattern] — synonyms and common phrasings. Order is irrelevant; mention position wins. */
 const SYNONYMS = [
   ['hubspot', /hub\s?spot/],
+  ['greenhouse', /greenhouse/],
+  ['lever', /\blever\b(?! arch)/],
+  ['workday', /workday/],
+  ['bamboohr', /bamboo\s?hr/],
   ['salesforce', /sales\s?force|\bsfdc\b/],
   ['gmail', /\bgmail\b|google mail|g-mail/],
   ['outlook', /\boutlook\b|office\s?365|microsoft 365|\bo365\b|exchange mail/],

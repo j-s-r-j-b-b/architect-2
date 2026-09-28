@@ -1,7 +1,7 @@
 // Floating "Reviewer guide" checklist, mounted on every page (hidden on live apps).
 import { html, useState, useEffect, useRef } from '../../lib/html.js';
 import { route, navigate } from '../../lib/router.js';
-import { Icon, Button } from '../../ui/index.js';
+import { Icon, Button, toast } from '../../ui/index.js';
 import { cx } from '../../lib/util.js';
 import { TOUR_ITEMS, tourState, setTour, runItem } from './items.js';
 
@@ -44,7 +44,7 @@ export default function TourLauncher() {
       </ol>
       <div class="tr-panel__foot">
         <${Button} size="sm" variant="ghost" icon="book-open" onClick=${() => { setOpen(false); navigate('/tour'); }}>Full guide & design rationale<//>
-        <button class="tr-hide" onClick=${() => { setOpen(false); setTour({ hidden: true }); }}>Hide guide</button>
+        <button class="tr-hide" onClick=${() => { setOpen(false); setTour({ hidden: true }); toast('Reviewer guide hidden — it stays on the /tour page', { action: { label: 'Undo', onClick: () => setTour({ hidden: false }) }, duration: 6000 }); }}>Hide guide</button>
       </div>
     </div>` : null}
     ${inWorkspace

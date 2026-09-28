@@ -9,6 +9,7 @@ import { approveQuote, answerQuestions } from '../../engine/conversation.js';
 import { estimateQuote } from '../../engine/quote.js';
 import { MODEL_TIERS } from '../../engine/catalog.js';
 import { askArchitect } from '../bus.js';
+import { quoteFor, draftCap, setDraftCap, draftTier, setDraftTier } from '../cards/PlanCards.js';
 
 // ---------------------------------------------------------------------------
 // Quote
@@ -28,18 +29,20 @@ export function QuoteCard({ project: p }) {
 }
 
 function QuoteOpen({ project: p }) {
-  const [tier, setTier] = useState(p.settings?.modelTier || p.plan.quote?.modelTier || 'balanced');
-  const q = useMemo(() => estimateQuote(p, { modelTier: tier }) || p.plan.quote, [p, tier]);
+  // Tier + cap are shared with the chat Quote card (same numbers in both places).
+  const tier = draftTier(p);
+  const q = useMemo(() => quoteFor(p, tier) || p.plan.quote, [p.plan.quote, tier]);
   const credits = q.credits || [0, 0];
   const minutes = q.minutes || [0, 0];
-  const suggested = Math.ceil(credits[1] * 1.15);
-  const [cap, setCap] = useState(p.plan.quote?.cap || p.settings?.budgetCap || suggested);
   const [busy, setBusy] = useState(false);
   const balance = wallet.value.balance;
-  const capMin = Math.max(1, Math.floor(credits[0] * 0.8));
-  const capMax = Math.max(capMin + 10, Math.ceil(credits[1] * 2.5));
+  const capMin = Math.max(5, Math.floor(credits[0] * 0.6));
+  const capMax = Math.max(capMin + 10, Math.ceil((credits[1] * 2.5) / 5) * 5);
+  const cap = Math.min(capMax, Math.max(capMin, draftCap(p, q)));
+  const setCap = (v) => setDraftCap(p.id, v);
+  const mid = Math.round((credits[0] + credits[1]) / 2);
   const tierInfo = MODEL_TIERS.find((t) => t.id === tier);
-  const changeTier = (v) => { setTier(v); updateProject(p.id, (d) => { d.settings.modelTier = v; }, { touch: false }); };
+  const changeTier = (v) => setDraftTier(p.id, v);
   const build = async () => {
     const ok = await requireAuth({ reason: 'Sign in to build your app', projectId: p.id });
     if (!ok) return;
@@ -77,7 +80,7 @@ function QuoteOpen({ project: p }) {
         : `Architect pauses and asks at 80% (${Math.round(cap * 0.8)} cr). It never spends past ${cap} cr without you.`}</div>
     </div>
     ${balance < credits[1] ? html`<${Callout} tone="amber" icon="wallet" class="mt-12">You have ${fmtNumber(balance)} credits. <a class="link" href="/billing">Top up</a> or pick <b>Fast</b> to fit the budget.<//>` : null}
-    <${Button} variant="primary" size="lg" full class="mt-16" iconRight="arrow-right" loading=${busy} onClick=${build}>Build it<//>
+    <${Button} variant="primary" size="lg" full class="mt-16" icon="play" loading=${busy} onClick=${build}>Build it · ≈${mid} cr<//>
     <p class="t-xs t-faint mt-8 t-center">Charged on actual usage, within the range. Fixes for anything Architect breaks are free.</p>
   </div>`;
 }
@@ -166,7 +169,7 @@ export function DecisionsCard({ project: p }) {
     </div>
     ${!list.length && edit !== 'new' ? html`<p class="t-sm t-faint mt-8">Choices you make while planning are recorded here, so nobody has to remember them.</p>` : null}
     <dl class="pl-decisions">
-      ${list.map((d, i) => (edit === i ? editor : html`<div class="pl-dec" key=${i}>
+      ${list.map((d, i) => (list.findIndex((x) => x.q === d.q && x.a === d.a) !== i ? null : edit === i ? editor : html`<div class="pl-dec" key=${i}>
         <dt>${d.q}</dt><dd>${d.a}</dd>
         <${IconButton} size="sm" icon="pencil" label="Edit decision" class="pl-dec__edit" onClick=${() => start(i)} />
       </div>`))}

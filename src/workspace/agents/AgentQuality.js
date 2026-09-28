@@ -3,9 +3,10 @@ import { html, useState } from '../../lib/html.js';
 import { cx, sleep, timeAgo, fmtNumber, fmtDate } from '../../lib/util.js';
 import { spend, wallet } from '../../lib/store.js';
 import { Button, Badge, Icon, Ring, Callout, Empty, Switch, Input, toast } from '../../ui/index.js';
-import { Trace, CompareBars, Sparkline, Stat, Disclosure } from './ui.js';
-import { genScenarios, scenarioPasses, METRICS, evalView, runEvaluation, monitorData } from './quality.js';
-import { patchSaved, stageEdit } from './state.js';
+import { Trace, CompareBars, Stat, Disclosure } from './ui.js';
+import { integrationById } from '../../engine/catalog.js';
+import { genScenarios, scenarioPasses, METRICS, FIXES, evalView, runEvaluation, monitorData } from './quality.js';
+import { patchSaved, stageEdit, stagedChanges } from './state.js';
 import { fmtUsd } from './model.js';
 
 const KIND_TONE = { quality: 'blueprint', grounded: 'violet', safety: 'green', approval: 'amber', routing: 'violet', limits: 'neutral', resilience: 'neutral', custom: 'outline' };
@@ -39,7 +40,7 @@ export function AgentTest({ project, agent }) {
     }
     setRunning(null);
     const passed = Object.values(res).filter(Boolean).length;
-    patchSaved(project.id, agent.id, (a) => { a.tests = { ...(a.tests || {}), lastRun: { at: Date.now(), passed, total: scenarios.length, version: agent.version, results: res } }; });
+    patchSaved(project.id, agent.id, (a) => { a.tests = { ...(a.tests || {}), lastRun: { at: Date.now(), passed, total: scenarios.length, version: agent.version, edits: stagedChanges(project, agent.id).length, results: res } }; });
     setLive(null);
     const failed = scenarios.find((s) => !res[s.id]);
     if (failed) setOpen(failed.id);
@@ -58,8 +59,10 @@ export function AgentTest({ project, agent }) {
   return html`<div class="ag-pane">
     <div class="ag-pane__head">
       <div class="grow"><h2 class="ag-pane__title">Dress rehearsal</h2><p class="t-sm t-muted">We play ${scenarios.length} realistic situations against ${agent.name} — happy paths, tricky ones and attacks — before real people do.</p></div>
-      ${last && !live ? html`<div class="ag-score"><${Ring} value=${Math.round((last.passed / last.total) * 100)} tone=${last.passed === last.total ? 'green' : 'amber'} label=${`${last.passed}/${last.total}`} /><span class="t-xs t-faint">v${last.version || agent.version} · ${timeAgo(last.at)}</span></div>` : null}
-      <${Button} variant="primary" icon="flask" loading=${running != null} onClick=${run}>Run ${scenarios.length} scenarios · ${TEST_COST} credits<//>
+      <div class="ag-pane__cta">
+        ${last && !live ? html`<div class="ag-score"><${Ring} value=${Math.round((last.passed / last.total) * 100)} tone=${last.passed === last.total ? 'green' : 'amber'} label=${`${last.passed}/${last.total}`} /><span class="t-xs t-faint" data-tip=${last.edits ? 'Ran on your unsaved edits, not the saved version' : null}>v${last.version || agent.version}${last.edits ? ' + edits' : ''} · ${timeAgo(last.at)}</span></div>` : null}
+        <${Button} variant="primary" icon="flask" loading=${running != null} onClick=${run}>Run ${scenarios.length} scenarios · ${TEST_COST} credits<//>
+      </div>
     </div>
     <ul class="ag-scens">
       ${scenarios.map((sc, i) => {
@@ -106,7 +109,7 @@ export function AgentEvaluate({ project, agent }) {
   return html`<div class="ag-pane">
     <div class="ag-pane__head">
       <div class="grow"><h2 class="ag-pane__title">Evaluation</h2><p class="t-sm t-muted">An independent judge model grades ${ev.n} saved conversations on four things that matter. Compare versions before you publish.</p></div>
-      <${Button} variant="primary" icon="bar-chart" loading=${busy} onClick=${run}>Run evaluation · ${EVAL_COST} credits<//>
+      <div class="ag-pane__cta"><${Button} variant="primary" icon="bar-chart" loading=${busy} onClick=${run}>Run evaluation · ${EVAL_COST} credits<//></div>
     </div>
     <div class="ag-evaltop">
       <div class="ag-evaltop__ring"><${Ring} size=${88} stroke=${7} value=${Math.round((ev.overall || 0) * 100)} tone=${ev.overall >= 0.85 ? 'green' : ev.overall >= 0.7 ? 'amber' : 'red'} label=${`${Math.round((ev.overall || 0) * 100)}%`} />
@@ -127,6 +130,25 @@ export function AgentEvaluate({ project, agent }) {
   </div>`;
 }
 
+const RETRY_FIX = FIXES.retry;
+
+/** Doctor card for a failed run: plain-words cause, the exact fix, one click to stage it. */
+function RunDoctor({ project, agent }) {
+  const tool = (agent.tools?.[0] && integrationById(agent.tools[0].id).name) || 'A connected tool';
+  const staged = (agent.instructions || '').includes(RETRY_FIX);
+  const apply = () => {
+    stageEdit(project.id, agent.id, (d) => { if (!d.instructions.includes(RETRY_FIX)) d.instructions = `${d.instructions.trim()} ${RETRY_FIX}`.trim(); });
+    toast('Fix staged — save the draft, then re-run the rehearsal to check it', { tone: 'success' });
+  };
+  return html`<${Callout} tone="amber" icon="stethoscope" class="mt-8" action=${staged
+    ? html`<${Badge} tone="green" icon="check">Fix staged<//>`
+    : html`<${Button} size="sm" variant="primary" icon="wand" onClick=${apply}>Apply fix<//>`}>
+    <div class="t-strong">Doctor · why this run failed</div>
+    <div>${tool} got too many requests at once and said “slow down” (HTTP 429). The agent retried twice too quickly, then gave up — so the person got no answer.</div>
+    <div class="t-xs t-muted mt-4">Fix: retry with growing gaps (2s → 8s → 30s), then queue the task and tell the person — instead of failing.</div>
+  <//>`;
+}
+
 export function AgentMonitor({ project, agent, onTry }) {
   const m = monitorData(project, agent);
   const [open, setOpen] = useState(null);
@@ -134,6 +156,7 @@ export function AgentMonitor({ project, agent, onTry }) {
   const alerts = agent.alerts || { errors: true, budget: true };
   const setAlert = (k, v) => patchSaved(project.id, agent.id, (a) => { a.alerts = { ...(a.alerts || { errors: true, budget: true }), [k]: v }; });
   const monthly = m.costPerRun * (m.runs / 7) * 30;
+  const maxDay = Math.max(1, ...m.days.map((d) => d.runs));
   return html`<div class="ag-pane">
     <div class="ag-pane__head"><div class="grow"><h2 class="ag-pane__title">Monitor</h2><p class="t-sm t-muted">The last 7 days. ${agent.status === 'live' ? `Live v${agent.liveVersion || agent.version}` : 'Draft runs from Try it, tests and your app preview'}.</p></div><${Badge} tone="neutral">Prototype: simulated<//></div>
     <div class="ag-stats">
@@ -144,8 +167,13 @@ export function AgentMonitor({ project, agent, onTry }) {
     </div>
     <div class="ag-chart">
       <div class="row gap-8"><span class="t-sm t-strong">Runs per day</span><span class="grow"></span><span class="t-xs t-faint">≈ ${fmtUsd(monthly)} / month at this rate${agent.limits?.monthlyBudget ? ` · budget $${agent.limits.monthlyBudget}` : ''}</span></div>
-      <${Sparkline} bars values=${m.days.map((d) => d.runs)} w=${560} h=${80} tone="violet" class="ag-chart__svg" />
-      <div class="ag-chart__x">${m.days.map((d) => html`<span>${d.label}${d.errors ? html`<i class="t-red"> ·${d.errors}</i>` : null}</span>`)}</div>
+      <div class="ag-bars" role="img" aria-label=${`Runs per day: ${m.days.map((d) => `${d.label} ${d.runs}`).join(', ')}`}>
+        ${m.days.map((d, i) => html`<div class="ag-bars__col" data-tip=${`${d.runs} run${d.runs === 1 ? '' : 's'}${d.errors ? ` · ${d.errors} error${d.errors > 1 ? 's' : ''}` : ''}`}>
+          <span class="ag-bars__val">${d.runs}</span>
+          <span class="ag-bars__track"><span class=${cx('ag-bars__bar', i === m.days.length - 1 && 'is-today')} style=${{ height: `${Math.max(4, Math.round((d.runs / maxDay) * 100))}%` }}></span></span>
+          <span class="ag-bars__lbl">${i === m.days.length - 1 ? 'Today' : d.label}${d.errors ? html`<i class="t-red"> · ${d.errors}</i>` : null}</span>
+        </div>`)}
+      </div>
     </div>
     <div class="t-sm t-strong mt-8">Recent runs</div>
     <ul class="ag-traces">
@@ -156,7 +184,7 @@ export function AgentMonitor({ project, agent, onTry }) {
           <span class="t-xs t-faint t-mono">${(t.ms / 1000).toFixed(1)}s · ${fmtUsd(t.cost)}</span>
           <span class="t-xs t-faint ag-tr__at">${timeAgo(t.at)}</span>
         </button>
-        ${open === t.id ? html`<div class="ag-tr__body"><${Trace} compact steps=${t.steps} /></div>` : null}
+        ${open === t.id ? html`<div class="ag-tr__body"><${Trace} compact steps=${t.steps} />${t.outcome === 'error' ? html`<${RunDoctor} project=${project} agent=${agent} />` : null}</div>` : null}
       </li>`)}
     </ul>
     <div class="ag-alerts">

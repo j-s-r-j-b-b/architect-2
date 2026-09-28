@@ -174,7 +174,7 @@ export function usagesOf(p, { agent, table }) {
   return out;
 }
 /** Is any bound table still on sample data? */
-export const sampleTables = (p) => (p?.data?.tables || []).filter((t) => t.source !== 'live');
+export const sampleTables = (p) => (p?.data?.tables || []).filter((t) => t.source === 'sample'); // test tables (agent logs) don't count
 export const promiseStats = (p) => {
   const ps = p?.plan?.promises || [];
   const active = ps.filter((x) => x.status !== 'deferred');

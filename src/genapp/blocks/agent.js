@@ -5,6 +5,7 @@ import { Icon } from '../../ui/icons.js';
 import { cx, uid, sleep, timeAgo, fmtDuration } from '../../lib/util.js';
 import { agentById, tableById } from '../../engine/schema.js';
 import { agentReply } from '../../engine/agentsim.js';
+import { approvalPhrase } from '../../engine/gen/kit.js';
 import { gxEvents } from '../runtime.js';
 import { useGx, Panel, SourceBadge, mdLite, BlockNote, Editable } from '../util.js';
 
@@ -64,10 +65,10 @@ function Trace({ steps, shown, running }) {
 function Approval({ run, agent, onDecide }) {
   const na = run.needsApproval;
   if (!na) return null;
-  if (run.approval === 'approved') return html`<div class="gx-approval is-done"><${Icon} name="check-circle" size=${15} /><span><strong>Approved.</strong> ${na.action.replace(/_/g, ' ')} queued — simulated, nothing was actually sent.</span></div>`;
+  if (run.approval === 'approved') return html`<div class="gx-approval is-done"><${Icon} name="check-circle" size=${15} /><span><strong>Approved.</strong> Go-ahead given for ${approvalPhrase(na.action)}. Simulated: nothing was actually sent.</span></div>`;
   if (run.approval === 'denied') return html`<div class="gx-approval is-denied"><${Icon} name="x-circle" size=${15} /><span><strong>Denied.</strong> Nothing was sent.</span></div>`;
   return html`<div class="gx-approval">
-    <div class="gx-approval__head"><${Icon} name="lock" size=${14} /><span><strong>${agent?.name || 'Agent'}</strong> wants to <code>${na.action}</code></span></div>
+    <div class="gx-approval__head"><${Icon} name="lock" size=${14} /><span><strong>${agent?.name || 'Agent'}</strong> needs your OK before ${approvalPhrase(na.action)} <code class="gx-approval__id">${na.action}</code></span></div>
     ${na.preview ? html`<div class="gx-approval__preview">${na.preview}</div>` : null}
     <div class="gx-approval__btns">
       <button class="gx-btn gx-btn--primary gx-btn--sm" onClick=${(e) => { e.stopPropagation(); onDecide(true); }}><${Icon} name="check" size=${13} /><span>Approve</span></button>

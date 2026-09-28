@@ -5,7 +5,7 @@ import { session, createProject, updateProject, addChat, updateChat, getProject,
 import { analyzePrompt, generateQuestions, generatePlan, planFromTemplate } from './generate.js';
 import { interpretEdit } from './intents.js';
 import { estimateQuote } from './quote.js';
-import { templateById, INTEGRATIONS, integrationById } from './catalog.js';
+import { templateById, INTEGRATIONS, integrationById, FRAMEWORKS } from './catalog.js';
 import { startBuild, runEdit, isActive, onRunEnd } from './simulate.js';
 import { sleep, fmtRange, uid } from '../lib/util.js';
 
@@ -22,6 +22,14 @@ function setThinking(projectId, label) {
 
 const PRE_BUILD = ['draft', 'planning', 'ready'];
 export const isPreBuild = (p) => PRE_BUILD.includes(p?.status) && !p?.plan?.approvedAt;
+
+/** "Book Club Books" → "Book Club": drop a trailing noun that repeats an earlier word. */
+export function tidyName(n = '') {
+  const w = String(n || '').trim().split(/\s+/);
+  if (w.length < 3) return n;
+  return w.slice(0, -1).some((x) => stem(x) === stem(w[w.length - 1])) ? w.slice(0, -1).join(' ') : n;
+}
+const stem = (x = '') => String(x).toLowerCase().replace(/(es|s)$/, '');
 
 /** Recommended answers: the option hinted "Recommended", else the first. */
 export function recommendedAnswers(questions = []) {
@@ -46,6 +54,7 @@ export function startProject({ prompt = '', templateId, skipPlan, source, attach
   const t = templateId ? templateById(templateId) : null;
   const text = prompt || t?.prompt || '';
   const analysis = analyzePrompt(text);
+  analysis.name = tidyName(analysis.name);
   const p = createProject({
     name: name || t?.title || analysis.name, prompt: text, status: 'planning', archetype: analysis.archetype,
     icon: t?.icon || analysis.icon, color: analysis.color, description: analysis.summary && analysis.summary !== text ? analysis.summary : '',
@@ -84,13 +93,16 @@ export async function answerQuestions(projectId, answers = {}, { instant = false
   let plan;
   try {
     const tpl = p.source?.type === 'template' && p.source.ref && templateById(p.source.ref);
-    plan = tpl ? planFromTemplate(p.source.ref, answers) : generatePlan(p.prompt, answers, analyzePrompt(p.prompt));
+    const an = analyzePrompt(p.prompt);
+    an.name = p.name && p.name !== 'Untitled app' ? p.name : tidyName(an.name);
+    plan = tpl ? planFromTemplate(p.source.ref, answers) : generatePlan(p.prompt, answers, an);
   } catch (e) {
     console.error('[conversation] plan failed', e);
     setThinking(projectId, null);
     addChat(projectId, { type: 'text', text: 'I couldn’t draft the plan just now. Nothing was charged — try **Continue** again, or describe the app in a bit more detail.', data: { error: true } });
     return;
   }
+  const fw = frameworkFromPrompt(p.prompt);
   updateProject(projectId, (d) => {
     const keepName = d.name && d.name !== 'Untitled app' ? d.name : null;
     const { plan: pl, ...rest } = plan;
@@ -100,6 +112,11 @@ export async function answerQuestions(projectId, answers = {}, { instant = false
     d.plan.promises = (d.plan.promises || []).map((x) => { const y = { ...x, status: x.status === 'deferred' ? 'deferred' : 'planned' }; delete y.proof; return y; });
     for (const s of d.screens || []) for (const b of s.blocks || []) delete b.buildState;
     for (const a of d.agents || []) delete a.buildState;
+    // Developers often name a framework in the prompt ("in LangGraph") — honour it on every agent.
+    if (fw) {
+      for (const a of d.agents || []) a.framework = fw.id;
+      d.plan.decisions = [...(d.plan.decisions || []).filter((x) => x.q !== 'Agent framework'), { q: 'Agent framework', a: `${fw.name} — from your prompt. One spec, so you can switch any agent later.` }];
+    }
     d.plan.quote = pl?.quote || estimateQuote(d, { modelTier: d.settings.modelTier });
     d.status = 'ready';
     d.build = null;
@@ -111,13 +128,13 @@ export async function answerQuestions(projectId, answers = {}, { instant = false
   const included = ps.filter((x) => x.status !== 'deferred');
   addChat(projectId, {
     type: 'plan',
-    text: `Here’s the plan — ${included.length} promise${included.length === 1 ? '' : 's'}, ${np.agents.length} agent${np.agents.length === 1 ? '' : 's'} and ${np.screens.length} screen${np.screens.length === 1 ? '' : 's'}. Nothing is built or charged yet.`,
+    text: `Here’s the plan — ${included.length} promise${included.length === 1 ? '' : 's'}, ${np.agents.length} agent${np.agents.length === 1 ? '' : 's'}${fw && np.agents.length ? ` (${fw.name})` : ''} and ${np.screens.length} screen${np.screens.length === 1 ? '' : 's'}. Nothing is built or charged yet.`,
     data: { summary: np.plan.summary, promiseIds: ps.map((x) => x.id) },
   });
   if (deferred.length) {
     addChat(projectId, {
       type: 'scope',
-      text: deferred.length === 1 ? 'Scope check: one thing you asked for is deferred for now.' : `Scope check: ${deferred.length} things you asked for are deferred for now.`,
+      text: deferred.length === 1 ? 'Scope check: one optional extra is deferred for now — include it anytime.' : `Scope check: ${deferred.length} optional extras are deferred for now.`,
       data: { included: included.map((x) => x.id), deferred: deferred.map((x) => ({ id: x.id, reason: x.deferredReason || 'Deferred to keep the first build small.' })) },
     });
   }
@@ -129,6 +146,12 @@ export async function answerQuestions(projectId, answers = {}, { instant = false
     plain: `Drafted the plan: ${included.length} promises, ${np.agents.length} agents, ${np.screens.length} screens${q ? ` · quote ${fmtRange(q.credits)} credits` : ''}.`,
     technical: `plan v1 · ${np.screens.reduce((a, s) => a + s.blocks.length, 0)} blocks · ${np.data.tables.length} tables · ${deferred.length} deferred`,
   });
+}
+
+const FW_HINTS = [[/lang ?graph|langchain/i, 'langgraph'], [/crew ?ai/i, 'crewai'], [/openai agents?( sdk)?/i, 'openai-agents'], [/claude agent sdk/i, 'claude-agent-sdk'], [/google adk|\badk\b/i, 'google-adk'], [/\bmastra\b/i, 'mastra'], [/git ?agent/i, 'gitagent']];
+function frameworkFromPrompt(text = '') {
+  const hit = FW_HINTS.find(([re]) => re.test(text || ''));
+  return hit ? FRAMEWORKS.find((f) => f.id === hit[1]) || null : null;
 }
 
 function detectIntegration(text = '') {
@@ -225,11 +248,16 @@ export function sendMessage(projectId, text, opts = {}) {
   const p = getProject(projectId);
   const body = String(text || '').trim();
   if (!p || !body) return null;
+  // Questions never change anything, so they are answered right away — even mid-run.
+  const mode = opts.mode || p.settings.mode;
+  let readOnly = mode === 'ask' || isWhy(body);
+  if (!readOnly && isActive(p)) { try { readOnly = interpretEdit(p, body, { selection: opts.selection || null })?.kind === 'question'; } catch { readOnly = false; } }
+  const queue = isActive(p) && !readOnly;
   const msg = addChat(projectId, {
     role: 'user', type: 'text', text: body, thread: opts.thread || 'main',
-    data: { mode: opts.mode || p.settings.mode, context: opts.context || null, attachments: opts.attachments?.length ? opts.attachments : undefined, queued: isActive(p) || undefined },
+    data: { mode, context: opts.context || null, attachments: opts.attachments?.length ? opts.attachments : undefined, queued: queue || undefined },
   });
-  if (isActive(p)) {
+  if (queue) {
     setQueue(projectId, [...(queues.value[projectId] || []), { id: msg.id, text: body, opts }]);
     return { queued: true, msg };
   }
@@ -260,9 +288,10 @@ async function process(projectId, text, opts, userMsg) {
     return;
   }
 
-  setThinking(projectId, mode === 'ask' ? 'Thinking…' : 'Working out the change…');
+  setThinking(projectId, mode === 'ask' || isWhy(text) ? 'Thinking…' : 'Working out the change…');
   await sleep(550);
   setThinking(projectId, null);
+  if (isWhy(text) && !isPreBuild(getProject(projectId))) { explainWhy(projectId, text, thread); return; }
   let intent;
   try { intent = interpretEdit(getProject(projectId), text, { selection: opts.selection || null }); } catch (e) {
     console.error('[conversation] interpretEdit', e);
@@ -319,6 +348,63 @@ async function process(projectId, text, opts, userMsg) {
     return;
   }
   runEdit(projectId, intent, { text });
+}
+
+// ---------------------------------------------------------------------------
+// "Why is this ticket urgent?" — explain a value: who decided it, from what, by which rule.
+// ---------------------------------------------------------------------------
+function isWhy(t = '') { return /^\s*(why|how come)\b/i.test(t); }
+
+function explainWhy(projectId, text, thread) {
+  const p = getProject(projectId);
+  const words = text.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean);
+  const tables = p.data?.tables || [];
+  const agents = p.agents || [];
+  const workers = agents.filter((a) => a.kind !== 'manager');
+  // Prefer the table named in the question; else one whose status options match a word in it.
+  let table = tables.find((tb) => words.some((w) => stem(w) === stem(tb.name)));
+  let col = null, val = null;
+  for (const tb of table ? [table] : tables) {
+    for (const c of tb.columns || []) {
+      const opt = (c.options || []).find((o) => words.includes(String(o).toLowerCase()));
+      if (opt) { table = tb; col = c; val = opt; break; }
+    }
+    if (col) break;
+  }
+  table = table || tables[0];
+  if (!table || !agents.length) {
+    reply(projectId, 'I can explain values once the app has data and at least one agent. Nothing changed.', { free: true }, thread);
+    return;
+  }
+  const cols = table.columns || [];
+  const rows = table.rows || [];
+  const row = (col && rows.find((r) => String(r[col.key]).toLowerCase() === String(val).toLowerCase())) || rows[0];
+  const titleCol = cols.find((c) => /subject|title|name|summary/i.test(`${c.label} ${c.key}`) && c.type === 'text') || cols.find((c) => c.type === 'text') || cols[0];
+  const rowName = row && titleCol ? row[titleCol.key] : null;
+  if (!col) col = cols.find((c) => c.type === 'status' || c.type === 'score') || null;
+  if (!val && col && row) val = row[col.key];
+  const mentions = (a) => new RegExp(`\\b${stem(table.name)}`, 'i').test(`${a.role || ''} ${a.instructions || ''}`);
+  const agent = workers.find((a) => col && (a.outputs || []).some((o) => stem(o.key) === stem(col.key))) || workers.find(mentions) || workers[0] || agents[0];
+  const looked = cols.filter((c) => c !== col && c !== titleCol && c.key !== 'id' && !['url', 'bool', 'email', 'person'].includes(c.type)).slice(0, 3).map((c) => c.label);
+  const rule = String(agent.instructions || '').split(/(?<=[.!?])\s+/).find((x) => x.length > 16) || agent.role || '';
+  const subject = rowName ? `“${rowName}”` : `this ${String(table.name).toLowerCase().replace(/ies$/, 'y').replace(/s$/, '')}`;
+  const lines = [
+    `**Why ${subject} ${val ? `is ${val}` : 'looks like this'}**`,
+    `- **Decided by:** ${agent.name}${agent.role ? ` — ${agent.role}` : ''}`,
+    looked.length ? `- **It looked at:** ${looked.join(', ')}${col ? ` → set ${col.label}` : ''}` : null,
+    rule ? `- **The rule it follows:** “${rule.replace(/\s+/g, ' ').slice(0, 180)}”` : null,
+    `- **Data:** ${table.source === 'live' ? 'live data.' : 'sample rows — connect your real source to explain live records.'}`,
+    '',
+    'Want a different outcome? Change the rule in the agent, or tell me in Build mode. Nothing changed — this answer is free.',
+  ].filter((x) => x !== null);
+  reply(projectId, lines.join('\n'), {
+    free: true,
+    actions: [
+      { label: 'See it in X-ray', kind: 'xray', icon: 'scan-eye' },
+      { label: `Tune ${agent.name}`, kind: 'nav', href: `/p/${projectId}/agents/${agent.id}`, icon: 'bot' },
+      { label: 'Agent logs', kind: 'panel', panel: 'logs', icon: 'scroll-text' },
+    ],
+  }, thread);
 }
 
 function proposal(projectId, text, intent, thread, preBuild) {

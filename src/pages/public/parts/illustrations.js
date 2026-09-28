@@ -196,7 +196,7 @@ export const STEPS = [
   { n: '01', title: 'Plan', body: 'Answer two or three questions. Get numbered promises and an itemised quote — before a single credit is spent.', meta: 'Always free', icon: 'list-checks', Illo: PlanIllo },
   { n: '02', title: 'Build', body: 'Watch screens, data and agents take shape step by step. Pause, stop or change course at any point.', meta: '≈ 9–14 min for a 3-screen app', icon: 'blocks', Illo: BuildIllo },
   { n: '03', title: 'Tune agents', body: 'Give each agent a job, tools and boundaries in plain words — or open the code behind them.', meta: 'Tested with evals first', icon: 'bot', Illo: TuneIllo },
-  { n: '04', title: 'Launch', body: 'A readiness check explains every item, then you get a live URL. Roll back to any checkpoint.', meta: 'Staging & production', icon: 'rocket', Illo: LaunchIllo },
+  { n: '04', title: 'Launch', body: 'A readiness check explains every item, then you get a live URL. Roll back to any checkpoint.', meta: 'Custom domain · analytics · Marketplace', icon: 'rocket', Illo: LaunchIllo },
 ];
 
 export function HowSteps() {

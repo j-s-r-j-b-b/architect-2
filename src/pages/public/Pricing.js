@@ -32,8 +32,9 @@ const PRICING_FAQ = [
 
 /** Rough estimator — mirrors the generator's quote lines (setup + per screen + per agent + per connection). */
 function estimate(screens, agents, ints) {
-  const lo = Math.round(3 + screens * 3.8 + agents * 5.5 + ints * 0.6);
-  const hi = Math.round(5 + screens * 5 + agents * 7.5 + ints * 1);
+  // Calibrated so 3 screens · 2 agents · 3 connections = 36–48 cr (Lead Desk, as quoted in the worked examples).
+  const lo = Math.round(5 + screens * 5 + agents * 6.5 + ints * 1);
+  const hi = Math.round(7 + screens * 6.5 + agents * 8.5 + ints * 1.5);
   return [lo, hi];
 }
 
@@ -42,7 +43,7 @@ function Estimator() {
   const [agents, setAgents] = useState(2);
   const [ints, setInts] = useState(3);
   const [lo, hi] = estimate(screens, agents, ints);
-  const mins = [Math.round(3 + screens * 1.6 + agents * 1.2), Math.round(5 + screens * 2.4 + agents * 1.8)];
+  const mins = [Math.round(2 + screens * 1.6 + agents * 1.2), Math.round(3 + screens * 2.4 + agents * 1.8)];
   const fits = PLANS.filter((p) => p.credits).map((p) => ({ ...p, builds: Math.floor(p.credits / hi) }));
   const first = fits.find((p) => p.builds >= 1);
   return html`<div class="pb-est">

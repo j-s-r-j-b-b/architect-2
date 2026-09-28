@@ -6,12 +6,16 @@ import { projectList, prefs, setPrefs, resolvedTheme } from '../lib/store.js';
 import { Icon, Kbd, StatusPill } from '../ui/index.js';
 import { cx, timeAgo } from '../lib/util.js';
 
+// [label, href, icon, synonyms people actually type]
 const PAGES = [
-  ['Start', '/start', 'sparkles'], ['Projects', '/projects', 'folder'], ['Agents', '/agents', 'bot'], ['Connections', '/connections', 'plug'],
-  ['Marketplace', '/marketplace', 'store'], ['Templates', '/templates', 'layout-grid'], ['Inbox', '/inbox', 'bell'], ['Usage & budgets', '/usage', 'gauge'],
-  ['Plans & billing', '/billing', 'credit-card'], ['Settings', '/settings', 'settings'], ['API & CLI tokens', '/settings/tokens', 'terminal'], ['Admin console', '/admin', 'building'],
-  ['Help center', '/help', 'help'], ['Trash', '/projects/trash', 'trash'],
+  ['Start', '/start', 'sparkles', 'new build prompt describe home'], ['Projects', '/projects', 'folder', 'apps my'], ['Agents', '/agents', 'bot', 'framework langgraph crewai'], ['Connections', '/connections', 'plug', 'integrations apps oauth slack hubspot'],
+  ['Marketplace', '/marketplace', 'store', 'remix community share'], ['Templates', '/templates', 'layout-grid', 'prompt library examples'], ['Inbox', '/inbox', 'bell', 'notifications approvals'], ['Usage & budgets', '/usage', 'gauge', 'credits spend cost meter receipts'],
+  ['Plans & billing', '/billing', 'credit-card', 'upgrade top up pricing invoice'], ['Settings', '/settings', 'settings', 'profile theme appearance'], ['API & CLI tokens', '/settings/tokens', 'terminal', 'developer cli key token'], ['Admin console', '/admin', 'building', 'governance policies audit sso'],
+  ['Help center', '/help', 'help', 'support docs guides contact'], ['Trash', '/projects/trash', 'trash', 'deleted restore'], ['Reviewer guide', '/tour', 'list-checks', 'tour checklist demo'],
+  ['GitHub account', '/connections/github', 'github', 'git repo developer'], ['MCP servers', '/connections/mcp', 'server', 'tools developer'], ['Model keys (BYOK)', '/connections/keys', 'key', 'openai anthropic gemini provider'],
 ];
+const rank = (x, s) => { const l = x.label.toLowerCase(); return l.startsWith(s) ? 2 : l.includes(s) ? 1 : 0; }; // label hits beat synonym hits
+const TAB_KEYS ={ launch: 'deploy publish release', code: 'files editor terminal', app: 'preview', agents: 'edit agent model prompt' };
 const TABS = [['App', 'app', 'monitor'], ['Plan', 'plan', 'list-checks'], ['Data', 'data', 'database'], ['Agents', 'agents', 'bot'], ['Code', 'code', 'code'], ['Insights', 'insights', 'bar-chart'], ['Launch', 'launch', 'rocket']];
 
 export default function CommandPalette() {
@@ -35,14 +39,24 @@ export default function CommandPalette() {
       { group: 'Actions', label: `Experience: ${prefs.value.experience === 'full' ? 'use Balanced' : 'Show me everything'}`, icon: 'sliders', run: () => setPrefs({ experience: prefs.value.experience === 'full' ? 'balanced' : 'full' }) },
       { group: 'Actions', label: 'Ask for help', icon: 'help', run: () => openHelper() },
     ];
-    if (cur) TABS.forEach(([l, t, i]) => out.push({ group: cur.name, label: `${l}`, icon: i, hint: `Go to ${l} tab`, run: () => navigate(`/p/${cur.id}/${t}`) }));
+    if (cur) {
+      TABS.forEach(([l, t, i]) => out.push({ group: cur.name, label: `${l}`, icon: i, hint: `Go to ${l} tab`, k: TAB_KEYS[t], run: () => navigate(`/p/${cur.id}/${t}`) }));
+      out.push({ group: cur.name, label: 'Publish / deploy…', icon: 'rocket', hint: 'Readiness, then Staging or Production', k: 'deploy release ship launch', run: () => import('../workspace/launch/publish.js').then((m) => m.openPublishFlow(cur.id)) });
+      out.push({ group: cur.name, label: 'Review changes & open a pull request', icon: 'git-pull-request', hint: 'Diff vs checkpoint', k: 'github pr diff commit push branch', run: () => navigate(`/p/${cur.id}/code/review`) });
+      out.push({ group: cur.name, label: 'Launch readiness', icon: 'shield-check', hint: 'Checks that fix', run: () => navigate(`/p/${cur.id}/launch/readiness`) });
+      out.push({ group: cur.name, label: 'Deploys & rollback', icon: 'rotate-ccw', k: 'deploy history revert', run: () => navigate(`/p/${cur.id}/launch/deploys`) });
+      out.push({ group: cur.name, label: 'Rename URL / custom domain', icon: 'globe', k: 'address link dns', run: () => navigate(`/p/${cur.id}/launch/domains`) });
+    } else if (projectList.value[0]) {
+      const last = projectList.value[0];
+      out.push({ group: 'Actions', label: `Publish ${last.name}…`, icon: 'rocket', hint: 'Opens its Launch tab', k: 'deploy release ship launch', run: () => navigate(`/p/${last.id}/launch`) });
+    }
     projectList.value.slice(0, 20).forEach((p) => out.push({ group: 'Projects', label: p.name, icon: p.icon || 'folder', status: p.status, hint: `Edited ${timeAgo(p.updatedAt)}`, run: () => navigate(`/p/${p.id}/${['draft', 'planning', 'ready'].includes(p.status) ? 'plan' : 'app'}`) }));
-    PAGES.forEach(([l, h, i]) => out.push({ group: 'Pages', label: l, icon: i, run: () => navigate(h) }));
+    PAGES.forEach(([l, h, i, k]) => out.push({ group: 'Pages', label: l, icon: i, k, run: () => navigate(h) }));
     const s = q.trim().toLowerCase();
     if (!s) return out.filter((x) => x.group !== 'Projects' || out.indexOf(x) < 40).slice(0, 40);
     const words = s.split(/\s+/);
-    return out.filter((x) => words.every((w) => `${x.label} ${x.group} ${x.hint || ''}`.toLowerCase().includes(w)))
-      .sort((a, b) => (b.label.toLowerCase().startsWith(s) ? 1 : 0) - (a.label.toLowerCase().startsWith(s) ? 1 : 0));
+    return out.filter((x) => words.every((w) => `${x.label} ${x.group} ${x.hint || ''} ${x.k || ''}`.toLowerCase().includes(w)))
+      .sort((a, b) => rank(b, s) - rank(a, s));
   }, [open, q, projectList.value, route.value.path]);
 
   useEffect(() => { setIdx(0); }, [q]);
@@ -71,7 +85,7 @@ export default function CommandPalette() {
             ${it.hint ? html`<span class="ap-pal__hint">${it.hint}</span>` : null}
             ${i === idx ? html`<${Icon} name="corner-down-left" size=${13} class="t-faint" />` : null}
           </button>`;
-        }) : html`<div class="ap-pal__empty">No results for “${q}”</div>`}
+        }) : html`<div class="ap-pal__empty">No results for “${q}”<div class="t-xs t-faint mt-4">Try “publish”, “GitHub”, “credits” or a project name.</div></div>`}
       </div>
       <div class="ap-pal__foot"><span><${Kbd}>↑<//><${Kbd}>↓<//> move</span><span><${Kbd}>Enter<//> open</span><span><${Kbd}>Esc<//> close</span></div>
     </div>

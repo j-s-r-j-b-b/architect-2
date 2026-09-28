@@ -10,7 +10,9 @@ export function simulatedTree(kind, name = 'project', code = '') {
   if (kind === 'agent') {
     const fw = /crewai|Crew\(|@agent/i.test(code) ? 'crewai' : /openai.agents|from agents import|Runner\.run/i.test(code) ? 'openai-agents' : 'langgraph';
     const reqs = { crewai: 'crewai==0.86.0\ncrewai-tools', 'openai-agents': 'openai-agents==0.4.0\nopenai', langgraph: 'langgraph==0.2.34\nlangchain-openai' }[fw];
-    return { files: [`agents/${n.replace(/-/g, '_')}.py`, 'agents/tools.py', 'requirements.txt', '.env.example', 'tests/test_agent.py'], requirements: reqs + '\npython-dotenv', packageJson: null, defaultBranch: 'main' };
+    // Env vars the pasted code really reads (os.environ[...], os.getenv(...), process.env.X) become secrets to fill in.
+    const envKeys = [...new Set([...String(code).matchAll(/(?:os\.environ(?:\.get)?[[(]|os\.getenv\(|process\.env\.)\s*['"]?([A-Z][A-Z0-9_]{2,})/g)].map((m) => m[1]))];
+    return { files: [`agents/${n.replace(/-/g, '_')}.py`, 'agents/tools.py', 'requirements.txt', '.env.example', 'tests/test_agent.py'], requirements: reqs + '\npython-dotenv', packageJson: null, defaultBranch: 'main', envKeys };
   }
   const vite = kind === 'builder-vite';
   return {
@@ -26,7 +28,7 @@ export function simulatedTree(kind, name = 'project', code = '') {
 }
 
 /** Build the Understanding report. */
-export function analyzeRepo({ files = [], packageJson = null, requirements = '', name = 'project', ref = '', defaultBranch = 'main' }) {
+export function analyzeRepo({ files = [], packageJson = null, requirements = '', name = 'project', ref = '', defaultBranch = 'main', envKeys = [] }) {
   const deps = { ...(packageJson?.dependencies || {}), ...(packageJson?.devDependencies || {}) };
   const req = String(requirements || '').toLowerCase();
   const has = (re) => files.some((f) => re.test(f));
@@ -71,8 +73,9 @@ export function analyzeRepo({ files = [], packageJson = null, requirements = '',
     if (deps['@supabase/supabase-js']) secrets.push('SUPABASE_URL', 'SUPABASE_ANON_KEY');
     if (deps['next-auth']) secrets.push('NEXTAUTH_SECRET');
     if (/openai|langchain|crewai/.test(req) || framework) secrets.push('OPENAI_API_KEY');
-    if (!secrets.length) secrets.push('APP_SECRET');
   }
+  for (const k of envKeys) if (!secrets.includes(k)) secrets.push(k);
+  if (has(/\.env\.example$/) && !secrets.length) secrets.push('APP_SECRET');
   const tests = files.filter((f) => /(^|\/)(tests?|__tests__)\/|\.(spec|test)\.[jt]sx?$|(^|\/)test_[^/]+\.py$/.test(f));
   const scripts = Object.entries(packageJson?.scripts || {}).map(([k, v]) => ({ name: k, cmd: v, auto: /^(pre|post)?install$|^prepare$/.test(k) }));
   if (req) scripts.push({ name: 'pip install', cmd: `${req.split('\n').filter(Boolean).length} Python packages from requirements`, auto: false });

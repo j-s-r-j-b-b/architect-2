@@ -9,6 +9,28 @@ import { fmtRange } from '../lib/util.js';
 
 const GOOGLE_G = html`<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>`;
 
+/** Plain-language reason for a sign-in wall, derived from where the person was heading. */
+export function reasonFor(next = '') {
+  if (!next || !next.startsWith('/')) return null;
+  const src = (next.match(/[?&]source=([a-z]+)/) || [])[1];
+  if (next.startsWith('/start/import')) return src === 'design' ? 'Sign in to start from your Figma file or URL' : src === 'agent' ? 'Sign in to bring in your existing agent code' : 'Sign in to import your GitHub repo';
+  if (next.startsWith('/start/consultant')) return 'Sign in to talk it through with the AI Consultant';
+  if (next.startsWith('/agents')) return 'Sign in to see and edit your agents';
+  if (next.startsWith('/connections')) return 'Sign in to connect your tools and MCP servers';
+  if (next.startsWith('/p/')) return 'Sign in to open this project';
+  if (next.startsWith('/usage') || next.startsWith('/billing')) return 'Sign in to see your credits and usage';
+  if (next.startsWith('/admin') || next.startsWith('/settings')) return 'Sign in to manage your workspace';
+  if (next.startsWith('/projects')) return 'Sign in to see your projects';
+  if (next.startsWith('/start?') || next === '/start/') return 'Sign in to start a new project';
+  return null;
+}
+
+function ReasonNote({ next }) {
+  const r = reasonFor(next);
+  if (!r) return null;
+  return html`<div class="auth__reason"><${Icon} name="lock" size=${14} /><div><b>${r}.</b> It takes a few seconds — planning and quotes stay free.</div></div>`;
+}
+
 function afterSignIn(next) {
   const dest = next && next.startsWith('/') ? next : '/start';
   if (!prefs.value.onboarded) navigate(`/onboarding?next=${encodeURIComponent(dest)}`, { replace: true });
@@ -67,7 +89,7 @@ function AuthAside({ projectId }) {
       <div class="t-xl t-strong">${p.name}</div>
       <p class="t-md t-muted mt-4">${p.plan.summary || p.prompt}</p>
       <div class="row gap-16 mt-16 t-sm">
-        <span class="row gap-6"><${Icon} name="list-checks" size=${15} />${p.plan.promises.length} promises</span>
+        <span class="row gap-6"><${Icon} name="list-checks" size=${15} />${p.plan.promises.filter((x) => x.status !== 'deferred').length} promises</span>
         <span class="row gap-6"><${Icon} name="bot" size=${15} />${p.agents.length} agents</span>
         ${q ? html`<span class="row gap-6"><${Icon} name="coins" size=${15} />${fmtRange(q.credits)} credits</span>` : null}
       </div>
@@ -83,12 +105,14 @@ function AuthAside({ projectId }) {
 
 export function LoginPage() {
   const next = route.value.query.next;
+  document.title = 'Sign in · Architect';
   if (session.value) { setTimeout(() => navigate(next || '/start', { replace: true }), 0); return null; }
   return html`<div class="auth">
     <div class="auth__form">
       <${Logo} />
       <div class="auth__form-inner">
         <div><h1 class="auth__title">Welcome back</h1><p class="t-muted mt-4">Sign in to keep building.</p></div>
+        <${ReasonNote} next=${next} />
         <${AuthForm} mode="login" onDone=${() => afterSignIn(next)} />
         <p class="t-sm t-muted">New to Architect? <a class="link" href=${`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`}>Create an account</a></p>
       </div>
@@ -99,12 +123,14 @@ export function LoginPage() {
 
 export function SignupPage() {
   const next = route.value.query.next;
+  document.title = 'Create your account · Architect';
   if (session.value) { setTimeout(() => navigate(next || '/start', { replace: true }), 0); return null; }
   return html`<div class="auth">
     <div class="auth__form">
       <${Logo} />
       <div class="auth__form-inner">
         <div><h1 class="auth__title">Start building</h1><p class="t-muted mt-4">Free to start. No credit card. Plans and quotes are always free.</p></div>
+        <${ReasonNote} next=${next} />
         <${AuthForm} mode="signup" onDone=${() => afterSignIn(next)} />
         <p class="t-sm t-muted">Already have an account? <a class="link" href=${`/login${next ? `?next=${encodeURIComponent(next)}` : ''}`}>Sign in</a></p>
         <p class="t-xs t-faint">By continuing you agree to the Terms and acknowledge the Privacy Policy.</p>
@@ -117,7 +143,14 @@ export function SignupPage() {
 /** In-flow sign-in sheet (e.g. pressing "Build it" while anonymous). */
 function SignInSheet({ close, reason, projectId }) {
   const p = projectId ? getProject(projectId) : null;
+  const q = p?.plan?.quote;
   return html`<${Modal} size="sm" onClose=${() => close(false)} title=${reason || 'Sign in to continue'} subtitle=${p ? `Your plan for “${p.name}” is saved — nothing is lost.` : 'It takes a few seconds.'} icon="lock">
+    ${p?.plan ? html`<div class="auth__recap">
+      <span class="auth__recap-item"><${Icon} name="list-checks" size=${14} />${(p.plan.promises || []).filter((x) => x.status !== 'deferred').length} promises</span>
+      <span class="auth__recap-item"><${Icon} name="bot" size=${14} />${(p.agents || []).length} agents</span>
+      ${q ? html`<span class="auth__recap-item"><${Icon} name="coins" size=${14} />${fmtRange(q.credits)} credits</span>` : null}
+      <span class="auth__recap-note">Free plan includes 300 credits a month. Nothing is charged until you approve the quote.</span>
+    </div>` : null}
     <${AuthForm} mode="signup" compact onDone=${() => close(true)} />
   <//>`;
 }

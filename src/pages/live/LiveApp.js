@@ -4,7 +4,7 @@ import { html, useState, useEffect } from '../../lib/html.js';
 import { AppRenderer } from '../../genapp/Renderer.js';
 import { getPublished } from '../../lib/db.js';
 import { getProject, projectsReady, projectList } from '../../lib/store.js';
-import { route as routeSig } from '../../lib/router.js';
+import { route as routeSig, navigate as navigateTo } from '../../lib/router.js';
 import { Icon, Button, Logo } from '../../ui/index.js';
 
 const deviceFor = (w) => (w < 640 ? 'mobile' : w < 1000 ? 'tablet' : 'desktop');
@@ -48,9 +48,11 @@ export default function LiveApp({ params }) {
     return () => { document.title = prev; };
   }, [app?.name, !!draft, state.status]);
 
+  // The URL is the source of truth: in-app links, Back/Forward and deep links all change the screen.
+  useEffect(() => { setR(`/${params.rest || ''}`); }, [params.rest]);
   const onNavigate = (to) => {
     setR(to);
-    try { history.replaceState(history.state, '', `/a/${slug}${to === '/' ? '' : to}${location.search}`); } catch { /* ignore */ }
+    navigateTo(`/a/${slug}${to === '/' ? '' : to}${location.search}`, { scroll: false });
   };
 
   if (!app && (waitDraft || state.status === 'loading')) {

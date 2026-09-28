@@ -9,12 +9,14 @@ import { AppPage } from '../../shells/AppShell.js';
 import { IntegrationTile } from '../../shells/ConnectSheet.js';
 import { AgentAvatar, FrameworkBadge, VersionPill, EvalChip, TierLabel } from '../../workspace/agents/ui.js';
 import { NewAgentMenu } from '../../workspace/agents/dialogs.js';
+import { addImportedEnv } from '../../workspace/agents/importer.js';
 import { AGENT_TEMPLATES, agentFromTemplate, normalizeAgent, fmtUsd } from '../../workspace/agents/model.js';
 
 /** An agent can live on its own: give it a home project with no screens. */
 function createStandalone(spec, { view } = {}) {
   const agent = normalizeAgent({ ...spec, version: 1, status: 'draft' });
   const p = createProject({ name: agent.name, status: 'built', screens: [], agents: [agent], description: agent.role });
+  if (agent.envRefs?.length) addImportedEnv(p.id, agent);
   logActivity(p.id, { actor: 'You', kind: 'agent', plain: `Created ${agent.name} as a standalone agent.`, technical: `agents/${agent.id} · framework ${agent.framework}` });
   toast(`${agent.name} created`, { tone: 'success' });
   navigate(`/p/${p.id}/agents/${agent.id}/build${view === 'code' ? '?view=code' : ''}`);
@@ -38,12 +40,24 @@ export default function AgentsLibrary() {
   return html`<${AppPage}>
     <${PageHeader} title="Agents" subtitle=${all.length ? `${all.length} agents across your projects · ${live} live · ${fmtNumber(runs)} runs this week` : 'Agents that think and act for you — inside an app or on their own.'}
       actions=${html`<${NewAgentMenu} standalone onCreate=${createStandalone} />`} />
+    <section class="ag-fwstrip" aria-label="Start in any framework">
+      <div class="ag-fwstrip__txt">
+        <div class="t-strong t-sm">One agent spec, any framework</div>
+        <div class="t-xs t-muted">Describe it once in plain words. Architect writes the code for the framework you pick. Edit the card or the code and the other one updates.</div>
+      </div>
+      <div class="ag-fwstrip__list">
+        ${FRAMEWORKS.map((f) => html`<button type="button" class=${cx('ag-fwchip', f.id === 'architect' && 'is-default')} data-tip=${`${f.desc} Opens a starter agent in ${f.name.replace(' (open spec)', '')}.`}
+          onClick=${() => createStandalone({ ...agentFromTemplate(AGENT_TEMPLATES[0]), framework: f.id }, { view: f.id === 'architect' ? 'card' : 'code' })}>
+          <span class="ag-fwchip__name">${f.name.replace(' (open spec)', '')}</span><span class="ag-fwchip__lang">${f.lang}</span>
+        </button>`)}
+      </div>
+    </section>
     ${!ready ? html`<div class="col gap-8">${[0, 1, 2].map(() => html`<${Skeleton} height=${56} />`)}</div>`
       : !all.length ? html`<${Empty} icon="bot" title="No agents yet" body="Start from a template below, describe one in plain words, or import code you already have." action=${html`<${NewAgentMenu} standalone onCreate=${createStandalone} label="Create an agent" />`} />`
         : html`
       <div class="ag-libbar">
         <${Input} size="sm" icon="search" placeholder="Search agents or projects" value=${q} onValue=${setQ} class="ag-libbar__search" aria-label="Search agents" />
-        <${Select} size="sm" value=${fw} onValue=${setFw} aria-label="Framework" options=${[{ value: 'all', label: 'All frameworks' }, ...FRAMEWORKS.map((f) => ({ value: f.id, label: f.name }))]} />
+        <${Select} size="sm" class="ag-libbar__fw" value=${fw} onValue=${setFw} aria-label="Framework" options=${[{ value: 'all', label: 'All frameworks' }, ...FRAMEWORKS.map((f) => ({ value: f.id, label: f.name }))]} />
         <${Segmented} size="sm" value=${status} onChange=${setStatus} options=${[{ value: 'all', label: 'All' }, { value: 'live', label: 'Live' }, { value: 'draft', label: 'Drafts' }]} />
       </div>
       <div class="ag-lib" role="table" aria-label="Agents">

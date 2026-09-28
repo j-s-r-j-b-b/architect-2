@@ -2,6 +2,7 @@
 // answers "what happens when I press Enter, what will it cost, and can I trust it?".
 import { html } from '../../lib/html.js';
 import { session } from '../../lib/store.js';
+import { route } from '../../lib/router.js';
 import { PromptBox } from '../../shells/PromptBox.js';
 import { IntegrationTile } from '../../shells/ConnectSheet.js';
 import { Icon, Button } from '../../ui/index.js';
@@ -78,9 +79,10 @@ export function CtaBand({ title, body, primaryLabel = 'Describe your app' }) {
 }
 
 export function StartFrom({ label = 'Start from' }) {
+  const me = session.value;
   return html`<div class="pb-startfrom" role="group" aria-label=${label}>
     <span class="pb-startfrom__label">${label}</span>
-    ${START_FROM.map((s) => html`<a href=${s.href} class="chip pb-startfrom__chip"><${Icon} name=${s.icon} size=${14} />${s.label}</a>`)}
+    ${START_FROM.map((s) => html`<a href=${s.href} class="chip pb-startfrom__chip" data-tip=${!me && s.href.startsWith('/start') ? 'Needs a free account — takes a few seconds' : null}><${Icon} name=${s.icon} size=${14} />${s.label}</a>`)}
   </div>`;
 }
 
@@ -93,7 +95,7 @@ export default function Landing() {
         <a href="/#how" class="pb-pill"><span class="pb-pill__tag">New</span><span>Agents, data and UI from one prompt</span><${Icon} name="arrow-right" size=${13} /></a>
         <h1 class="pb-hero__title">Describe it. See the plan<br class="pb-br" /> and the price. <em>Watch it build.</em></h1>
         <p class="pb-hero__sub">Architect turns a sentence into a working agentic app — with a quote before you spend, every step in view, and code you own.</p>
-        <div class="pb-hero__prompt"><${PromptBox} autoFocus /></div>
+        <div class="pb-hero__prompt"><${PromptBox} autoFocus initial=${route.value.query.prompt || ''} /></div>
         <${StartFrom} />
         <div class="pb-try">
           <div class="pb-try__label">Or start with an example</div>

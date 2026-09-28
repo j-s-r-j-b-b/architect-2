@@ -16,13 +16,20 @@ const NAV = [
   { href: '/marketplace', label: 'Marketplace', icon: 'store' },
 ];
 
+const TITLES = [
+  ['/start/consultant', 'Help me decide'], ['/start/import', 'Import a project'], ['/start', 'Start'], ['/projects/trash', 'Trash'], ['/projects', 'Projects'],
+  ['/agents', 'Agents'], ['/connections', 'Connections'], ['/marketplace', 'Marketplace'], ['/templates', 'Templates'], ['/inbox', 'Inbox'],
+  ['/usage', 'Usage & budgets'], ['/billing', 'Plans & billing'], ['/settings', 'Settings'], ['/admin', 'Admin console'], ['/help', 'Help center'], ['/tour', 'Reviewer guide'],
+];
+const pageTitle = (path = '') => (TITLES.find(([p]) => path === p || path.startsWith(p + '/')) || [null, 'Architect 2.0'])[1];
+
 export function AppShell({ children, wide }) {
   const collapsed = prefs.value.railCollapsed;
   const me = session.value;
   const recent = projectList.value.slice(0, 4);
   const w = wallet.value;
   const pct = w.monthly ? Math.round((w.balance / Math.max(w.monthly, w.balance)) * 100) : 100;
-  useEffect(() => { mobileRailOpen.value = false; }, [route.value.path]);
+  useEffect(() => { mobileRailOpen.value = false; document.title = `${pageTitle(route.value.path)} · Architect`; }, [route.value.path]);
 
   const accountItems = [
     { section: me?.email || 'Account' },

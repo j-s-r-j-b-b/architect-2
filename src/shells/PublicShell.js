@@ -3,12 +3,23 @@ import { html, useState, useEffect } from '../lib/html.js';
 import { Link, route } from '../lib/router.js';
 import { session, prefs, setPrefs, resolvedTheme } from '../lib/store.js';
 import { Logo, Button, IconButton, Menu, Icon } from '../ui/index.js';
-import { PERSONAS } from '../engine/catalog.js';
+import { PERSONAS, TEMPLATES } from '../engine/catalog.js';
 import { cx } from '../lib/util.js';
 
 export function ThemeToggle({ size = 'md' }) {
   const t = resolvedTheme();
   return html`<${IconButton} size=${size} icon=${t === 'dark' ? 'sun' : 'moon'} label=${t === 'dark' ? 'Light mode' : 'Dark mode'} tipPos="bottom" onClick=${() => setPrefs({ theme: t === 'dark' ? 'light' : 'dark' })} />`;
+}
+
+/** Tab titles for public pages (the workspace sets its own, which otherwise leaks back here). */
+function publicTitle(path = '/') {
+  const seg = path.split('/').filter(Boolean);
+  if (!seg.length) return 'Architect — build agentic apps you can trust';
+  if (seg[0] === 'for' && PERSONAS[seg[1]]) return `Architect for ${PERSONAS[seg[1]].label}`;
+  if (seg[0] === 'templates' && seg[1]) { const t = TEMPLATES.find((x) => x.id === seg[1]); if (t) return `${t.title} template · Architect`; }
+  if (seg[0] === 'marketplace' && seg[1]) return `${seg[1].split('-').map((w) => (w[0] || '').toUpperCase() + w.slice(1)).join(' ')} · Marketplace · Architect`;
+  const names = { pricing: 'Pricing', templates: 'Templates', marketplace: 'Marketplace', enterprise: 'Enterprise', help: 'Docs & help' };
+  return `${names[seg[0]] || 'Architect'}${names[seg[0]] ? ' · Architect' : ''}`;
 }
 
 export function PublicShell({ children }) {
@@ -19,7 +30,7 @@ export function PublicShell({ children }) {
     on(); window.addEventListener('scroll', on, { passive: true });
     return () => window.removeEventListener('scroll', on);
   }, []);
-  useEffect(() => setMenu(false), [route.value.path]);
+  useEffect(() => { setMenu(false); if (!route.value.path.startsWith('/tour')) document.title = publicTitle(route.value.path); }, [route.value.path]);
   prefs.value; // re-render on theme change
   const me = session.value;
   const personaItems = Object.entries(PERSONAS).map(([id, p]) => ({ label: p.label, href: `/for/${id}`, icon: { agencies: 'briefcase', founders: 'rocket', sales: 'target', support: 'headphones', hr: 'users', developers: 'code' }[id] }));

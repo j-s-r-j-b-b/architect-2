@@ -44,9 +44,26 @@ export function resolveTheme(theme = {}) {
 
 const SANS = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 
+// Brand fonts other than the two the shell preloads are fetched from Google Fonts once, on first use.
+const loadedFonts = new Set(['geist', 'instrument serif']);
+function ensureFont(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key || loadedFonts.has(key) || typeof document === 'undefined' || !/^[a-z0-9 ]{2,40}$/.test(key)) return;
+  loadedFonts.add(key);
+  try {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    // Only request weights the family is known to have (unknown families get their regular weight; asking for missing weights 400s)
+    const multi = /^(inter|roboto|poppins|manrope|dm sans|ibm plex sans|space grotesk|work sans|nunito|outfit|open sans|playfair display|lora|fraunces|jetbrains mono|ibm plex mono)$/.test(key);
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(String(name).trim()).replace(/%20/g, '+')}${multi ? ':wght@400;500;600;700' : ''}&display=swap`;
+    document.head.appendChild(link);
+  } catch { /* offline or blocked: the fallback stack still renders */ }
+}
+
 /** Style object for the .gx root (Preact sets --custom-props via setProperty). */
 export function themeStyle(theme) {
   const t = resolveTheme(theme);
+  ensureFont(t.font);
   const serif = /serif/i.test(t.font) && !/sans/i.test(t.font);
   const mono = /mono/i.test(t.font);
   const body = serif || /^geist$/i.test(t.font) ? SANS : mono ? `"${t.font}", ui-monospace, monospace` : `"${t.font}", ${SANS}`;

@@ -75,6 +75,38 @@ export function runSQL(sql, tables) {
   return { table: t, columns: cols, rows };
 }
 
+/** Plain words → the small SQL dialect above. Returns { sql, explain } or null. Pure. */
+export function askToSQL(text, tables) {
+  if (!tables?.length || !text?.trim()) return null;
+  const s = ` ${text.toLowerCase().replace(/[?!.,;:]/g, ' ').replace(/\s+/g, ' ')} `;
+  const words = (x) => String(x).toLowerCase().replace(/[_-]/g, ' ');
+  const sing = (w) => w.replace(/ies$/, 'y').replace(/s$/, '');
+  const has = (w) => w && (s.includes(` ${w} `) || s.includes(` ${w}s `) || s.includes(` ${sing(w)} `));
+  const t = tables.find((x) => has(words(x.name)) || has(words(x.id)) || has(sing(words(x.name)))) || tables[0];
+  const cols = t.columns;
+  const mentions = (c) => has(words(c.label)) || has(words(c.key));
+  const nums = cols.filter((c) => NUMERIC.includes(c.type));
+  const num = nums.find(mentions) || nums[0];
+  const dateCol = cols.find((c) => c.type === 'datetime' || c.type === 'date');
+  const where = [], explain = [];
+  for (const c of cols) for (const o of c.options || []) if (s.includes(` ${String(o).toLowerCase()} `)) { where.push(`${c.key} = '${o}'`); explain.push(`${c.label.toLowerCase()} is ${o}`); }
+  const hi = s.match(/ (?:above|over|more than|greater than|at least) \$?([\d.]+)/);
+  const lo = s.match(/ (?:below|under|less than|at most) \$?([\d.]+)/);
+  if (num && hi) { const op = / at least /.test(s) ? '>=' : '>'; where.push(`${num.key} ${op} ${hi[1]}`); explain.push(`${num.label.toLowerCase()} ${op} ${hi[1]}`); }
+  if (num && lo) { const op = / at most /.test(s) ? '<=' : '<'; where.push(`${num.key} ${op} ${lo[1]}`); explain.push(`${num.label.toLowerCase()} ${op} ${lo[1]}`); }
+  const count = / (?:how many|count|number of) /.test(s);
+  let order = null;
+  if (/ (?:latest|newest|recent|most recent|last) /.test(s) && dateCol) order = [dateCol, 'DESC', 'newest first'];
+  else if (/ (?:lowest|smallest|least|cheapest|worst|bottom) /.test(s) && num) order = [num, 'ASC', `lowest ${num.label.toLowerCase()} first`];
+  else if ((/ (?:top|highest|biggest|largest|most|best) /.test(s) || / by /.test(s)) && num) order = [num, 'DESC', `highest ${num.label.toLowerCase()} first`];
+  const n = s.match(/ (?:top|first|last|latest|newest|best|bottom) (\d+) /) || s.match(/ (\d+) (?:\w+ )?(?:with|by|that|who|where) /) || s.match(/ show (\d+) /);
+  const limit = count ? null : n ? Number(n[1]) : 10;
+  const pick = [...new Set([...cols.slice(0, 4).map((c) => c.key), ...(num ? [num.key] : []), ...(order ? [order[0].key] : [])])];
+  const sql = `SELECT ${count ? 'COUNT(*)' : cols.length <= 5 ? '*' : pick.join(', ')} FROM ${t.id}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}${order && !count ? ` ORDER BY ${order[0].key} ${order[1]}` : ''}${limit ? ` LIMIT ${limit}` : ''}`;
+  const say = `${count ? 'Counting' : 'Showing'} ${t.name.toLowerCase()}${explain.length ? ` where ${explain.join(' and ')}` : ''}${order && !count ? `, ${order[2]}` : ''}${limit ? ` · up to ${limit}` : ''}.`;
+  return { sql, explain: say, table: t };
+}
+
 // ---------------------------------------------------------------------------
 // Cells
 // ---------------------------------------------------------------------------
@@ -191,7 +223,17 @@ function Rows({ project, table }) {
 
 function Schema({ project, table }) {
   const uses = usagesOf(project, { table: table.id });
-  const upd = (fn) => updateProject(project.id, (d) => { fn(d.data.tables.find((t) => t.id === table.id)); });
+  const tn = table.name.toLowerCase().replace(/s$/, '');
+  const colKeys = new Set(table.columns.map((c) => c.key));
+  const agentUses = (project.agents || []).map((a) => {
+    const how = [];
+    if ((a.triggers || []).some((t) => String(t.detail || '').toLowerCase().includes(tn))) how.push('starts on new rows');
+    const writes = (a.outputs || []).filter((o) => colKeys.has(o.key)).map((o) => o.key);
+    if (writes.length) how.push(`writes ${writes.join(', ')}`);
+    if (!how.length && `${a.instructions || ''} ${a.role || ''}`.toLowerCase().includes(tn)) how.push('reads it');
+    return how.length ? { agent: a, how: how.join(' · ') } : null;
+  }).filter(Boolean);
+  const upd =(fn) => updateProject(project.id, (d) => { fn(d.data.tables.find((t) => t.id === table.id)); });
   return html`<div class="dt-schema">
     <table class="dt-grid dt-grid--schema">
       <thead><tr><th>Column</th><th>Key</th><th>Type</th><th>Options</th></tr></thead>
@@ -205,7 +247,9 @@ function Schema({ project, table }) {
     <div class="row mt-12"><${Button} size="sm" icon="plus" onClick=${() => upd((t) => { const n = t.columns.length + 1; t.columns.push({ key: `field_${n}`, label: `New field ${n}`, type: 'text' }); })}>Add column<//></div>
     <div class="dt-uses mt-24">
       <div class="t-sm t-strong mb-8">Used by</div>
-      ${uses.length ? uses.map((u) => html`<div class="row gap-8 t-sm"><${Icon} name="monitor" size=${13} class="t-faint" /><span>${u.screen.title}</span><span class="t-faint">›</span><span class="t-muted">${u.block.title || u.block.type}</span><code class="t-xs t-faint t-mono">${u.screen.route}</code></div>`) : html`<div class="t-sm t-muted">No screen shows this table yet.</div>`}
+      ${uses.map((u) => html`<div class="row gap-8 t-sm"><${Icon} name="monitor" size=${13} class="t-faint" /><span>${u.screen.title}</span><span class="t-faint">›</span><span class="t-muted">${u.block.title || u.block.type}</span><code class="t-xs t-faint t-mono">${u.screen.route}</code></div>`)}
+      ${agentUses.map((u) => html`<a class="row gap-8 t-sm dt-uses__agent" href=${`/p/${project.id}/agents/${u.agent.id}/build`}><${Icon} name="bot" size=${13} class="t-faint" /><span>${u.agent.name}</span><span class="t-faint">›</span><span class="t-muted">${u.how}</span></a>`)}
+      ${!uses.length && !agentUses.length ? html`<div class="t-sm t-muted">No screen or agent uses this table yet.</div>` : null}
     </div>
   </div>`;
 }
@@ -234,14 +278,36 @@ function SqlConsole({ project }) {
   const [sql, setSql] = useState(first ? `SELECT ${first.columns.slice(0, 3).map((c) => c.key).join(', ')} FROM ${first.id}${numeric ? ` ORDER BY ${numeric.key} DESC` : ''} LIMIT 5` : '');
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
-  const run = () => { try { const t0 = performance.now(); const r = runSQL(sql, project.data.tables); r.ms = Math.max(1, Math.round(performance.now() - t0)); setRes(r); setErr(null); } catch (e) { setErr(e.message); setRes(null); } };
+  const [ask, setAsk] = useState('');
+  const [said, setSaid] = useState(null);
+  const run = (q = sql) => { try { const t0 = performance.now(); const r = runSQL(q, project.data.tables); r.ms = Math.max(1, Math.round(performance.now() - t0)); setRes(r); setErr(null); } catch (e) { setErr(e.message); setRes(null); } };
+  const askNow = (text = ask) => {
+    const r = askToSQL(text, project.data.tables);
+    if (!r) { toast('Type a question about your data first', { tone: 'warn' }); return; }
+    setAsk(text); setSql(r.sql); setSaid(r.explain); run(r.sql);
+  };
+  const statusCol = first?.columns.find((c) => c.type === 'status' && c.options?.length) || first?.columns.find((c) => c.options?.length);
+  const optPhrase = statusCol ? (statusCol.type === 'status' ? ` are ${String(statusCol.options[0]).toLowerCase()}` : ` have ${statusCol.label.toLowerCase()} ${String(statusCol.options[0]).toLowerCase()}`) : '';
+  const examples = first ? [
+    numeric ? `Top 5 ${first.name.toLowerCase()} by ${numeric.label.toLowerCase()}` : `Latest ${first.name.toLowerCase()}`,
+    `How many ${first.name.toLowerCase()}${optPhrase}?`,
+    numeric ? `${first.name} with ${numeric.label.toLowerCase()} above ${Math.round((Math.max(...first.rows.map((r) => Number(r[numeric.key]) || 0)) || 100) / 2)}` : null,
+  ].filter(Boolean) : [];
   const colOf = (k) => res?.table.columns.find((c) => c.key === k);
   return html`<div class="dt-pane">
-    <div class="row gap-8"><h2 class="t-lg t-strong grow">SQL console</h2><${Badge} tone="blueprint" size="sm">Read-only<//></div>
-    <p class="t-sm t-muted mt-4">Query your tables. Supports SELECT, WHERE (${'=, !=, >, <, LIKE, AND / OR'}), ORDER BY, LIMIT and COUNT(*).</p>
-    <div class="dt-sql mt-12">
-      <textarea class="dt-sql__input t-mono" rows="4" spellcheck="false" value=${sql} onInput=${(e) => setSql(e.currentTarget.value)} onKeyDown=${(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); } }}></textarea>
-      <div class="row gap-8 dt-sql__bar"><span class="t-xs t-faint grow">Tables: ${project.data.tables.map((t) => html`<button class="dt-chip-btn" onClick=${() => setSql(`SELECT * FROM ${t.id} LIMIT 10`)}>${t.id}</button>`)}</span><span class="t-xs t-faint">${modKey}+Enter</span><${Button} size="sm" variant="primary" icon="play" onClick=${run}>Run<//></div>
+    <div class="row gap-8"><h2 class="t-lg t-strong grow">Ask your data</h2><${Badge} tone="blueprint" size="sm">Read-only<//></div>
+    <p class="t-sm t-muted mt-4">Ask in plain words — we write the query and show it, so you can check or tweak exactly what ran. Nothing here can change your data.</p>
+    <form class="dt-ask mt-12" onSubmit=${(e) => { e.preventDefault(); askNow(); }}>
+      <${Icon} name="sparkles" size=${16} class="dt-ask__icon" />
+      <input class="dt-ask__input" value=${ask} onInput=${(e) => setAsk(e.currentTarget.value)} placeholder=${examples[0] ? `e.g. ${examples[0]}` : 'Ask a question about your tables'} aria-label="Ask a question about your data" />
+      <${Button} size="sm" variant="primary" type="submit" icon="arrow-right">Ask<//>
+    </form>
+    ${examples.length ? html`<div class="row gap-6 wrap mt-8">${examples.map((x) => html`<button type="button" class="chip chip--sm" onClick=${() => askNow(x)}>${x}</button>`)}</div>` : null}
+    ${said ? html`<div class="dt-said mt-12"><${Icon} name="message-square" size=${13} /><span>${said}</span></div>` : null}
+    <div class="row gap-8 mt-16"><span class="t-xs t-strong t-upper t-faint grow">SQL${said ? ' we wrote' : ''}</span><span class="t-xs t-faint">${'SELECT · WHERE (=, !=, >, <, LIKE, AND / OR) · ORDER BY · LIMIT · COUNT(*)'}</span></div>
+    <div class="dt-sql mt-8">
+      <textarea class="dt-sql__input t-mono" rows="4" spellcheck="false" value=${sql} onInput=${(e) => setSql(e.currentTarget.value)} onKeyDown=${(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); setSaid(null); run(); } }}></textarea>
+      <div class="row gap-8 dt-sql__bar"><span class="t-xs t-faint grow">Tables: ${project.data.tables.map((t) => html`<button class="dt-chip-btn" onClick=${() => setSql(`SELECT * FROM ${t.id} LIMIT 10`)}>${t.id}</button>`)}</span><span class="t-xs t-faint">${modKey}+Enter</span><${Button} size="sm" variant="secondary" icon="play" onClick=${() => { setSaid(null); run(); }}>Run SQL<//></div>
     </div>
     ${err ? html`<${Callout} tone="red" icon="alert-circle" class="mt-12">${err}<//>` : null}
     ${res ? html`<div class="mt-12">
@@ -257,7 +323,7 @@ function SourceCallout({ project, table }) {
   const connect = async (id) => {
     if (!(await openConnectSheet(id, { projectId: project.id }))) return;
     // A table with no source yet is now read from the database the user just connected.
-    updateProject(project.id, (d) => { const t = d.data.tables.find((x) => x.id === table.id); if (t && !t.connection) { t.connection = id; t.source = 'live'; } });
+    updateProject(project.id, (d) => { const t = d.data.tables.find((x) => x.id === table.id); if (t && !t.connection) { t.connection = id; t.source = 'live'; t.demoRows = true; } });
     toast(`${integrationById(id).name} connected — ${table.name} now uses live data`, { tone: 'success' });
   };
   if (table.source === 'live') return html`<${Callout} tone="green" icon="check-circle" class="dt-callout">Live data${it ? ` from ${it.name}` : ''}. Edits here write back to the source.<//>`;
@@ -286,7 +352,7 @@ export default function DataTab({ project }) {
       ${!tables.length ? html`<div class="t-xs t-muted p-12">No tables yet — they’re created when you build.</div>` : null}
       <div class="dt-side__sep"></div>
       <button type="button" class=${cx('dt-side__item', sel === '__users' && 'is-active')} onClick=${() => pick('__users')}><${Icon} name="users" size=${15} /><span class="grow">Users & rules</span></button>
-      <button type="button" class=${cx('dt-side__item', sel === '__sql' && 'is-active')} onClick=${() => pick('__sql')}><${Icon} name="terminal" size=${15} /><span class="grow">SQL console</span></button>
+      <button type="button" class=${cx('dt-side__item', sel === '__sql' && 'is-active')} onClick=${() => pick('__sql')}><${Icon} name="sparkles" size=${15} /><span class="grow">Ask your data</span><span class="dt-side__count">SQL</span></button>
     </aside>
     <main class="dt-main">
       ${sel === '__users' ? html`<${UsersRules} project=${project} />` : sel === '__sql' ? html`<${SqlConsole} project=${project} />` : table ? html`

@@ -158,14 +158,14 @@ function errorStory(p, blockId) {
   const file = b?.file || `components/${(b?.type || 'Block').replace(/^\w/, (c) => c.toUpperCase())}.tsx`;
   const promise = (p.plan?.promises || []).find((x) => x.id === b?.promise) || (p.plan?.promises || []).find((x) => (x.refs || []).includes(s?.id));
   if (b?.type === 'table') return {
-    what: `The ${b.title || 'table'} showed a blank first row while loading.`,
+    what: b.title ? `The “${b.title}” table showed a blank first row while loading.` : 'The table showed a blank first row while loading.',
     where: `${file} · ${s?.title || 'screen'}`,
     cause: 'Our generated code formatted dates differently on the server and in the browser (a hydration mismatch).',
     technical: `Error: Text content does not match server-rendered HTML.\n  at formatRelative (${file}:42)\n  server: "2 hours ago"  client: "2 hrs ago"\nFix: format dates on the client with a shared formatter.`,
     promise,
   };
   if (b?.type === 'chart') return {
-    what: `The ${b.title || 'chart'} came out empty.`,
+    what: b.title ? `The “${b.title}” chart came out empty.` : 'The chart came out empty.',
     where: `${file} · ${s?.title || 'screen'}`,
     cause: 'The chart expected numbers but received text labels from the table.',
     technical: `TypeError: Cannot read properties of undefined (reading 'value')\n  at buildSeries (${file}:27)\nFix: group rows before mapping to series.`,
@@ -250,7 +250,9 @@ async function execStep(projectId, token, i) {
   let p = getProject(projectId);
   const step = p.build.steps[i];
   mutBuild(projectId, (b) => {
-    b.stepIndex = i; b.label = step.label; b.stepStartedAt = Date.now();
+    // Full builds show the current step as their label; edits/fixes keep the request summary
+    // (it names the checkpoint and the run in History).
+    b.stepIndex = i; if (b.kind === 'build') b.label = step.label; b.stepStartedAt = Date.now();
     b.steps[i].status = 'running';
   });
   log(projectId, `▸ ${step.label}`);

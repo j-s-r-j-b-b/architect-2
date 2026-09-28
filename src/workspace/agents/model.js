@@ -224,6 +224,9 @@ export function describeToSpec(text, project) {
   if (sched) triggers.push({ type: 'schedule', detail: titleCaseFirst(sched[0].trim()) });
   if (/\b(when|whenever)\s+(a|an|new)\b/i.test(t)) { const m = t.match(/\b(when|whenever)\s+([^.,]+)/i); triggers.push({ type: 'event', detail: titleCaseFirst(m[2].trim()).slice(0, 60) }); }
   if (/\b(forward|emails? (come|arrive)|incoming email)/i.test(t)) triggers.push({ type: 'email', detail: 'Emails forwarded to its inbox' });
+  // "new/incoming support tickets", "new leads", "each new order" → an event, not a chat panel.
+  const newThing = !triggers.some((x) => x.type === 'event') && t.match(/\b(?:new|incoming|each new|every new|inbound)\s+(?:support\s+)?(tickets?|leads?|orders?|sign[- ]?ups?|requests?|applications?|invoices?|messages?|rows?)\b/i);
+  if (newThing) triggers.push({ type: 'event', detail: `New ${newThing[1].toLowerCase().replace(/s$/, '')} arrives` });
   if (!triggers.length) triggers.push({ type: 'chat', detail: 'Chat panel' });
   const outputs = [];
   if (/\bscore/i.test(t)) outputs.push({ key: 'score', type: 'number', desc: '0–100' }, { key: 'reason', type: 'text' });

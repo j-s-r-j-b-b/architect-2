@@ -7,7 +7,7 @@ import { generateFiles, filesAtCheckpoint } from '../../engine/codegen.js';
 import { slugify, timeAgo, sleep, cx } from '../../lib/util.js';
 import { Button, Select, Badge, Icon, Empty, Modal, Input, Textarea, Callout, Progress, openModal, toast } from '../../ui/index.js';
 import { compareFiles, hunks, fileIcon } from './diff.js';
-import { connectProjectRepo, SimBadge } from '../github/GitHubPopover.js';
+import { connectProjectRepo, SimBadge, simLinkClick } from '../github/GitHubPopover.js';
 
 const CI = ['Build', 'Type check', 'Promise tests', 'Preview deploy'];
 
@@ -26,9 +26,10 @@ function PRDialog({ close, projectId, changes, baseLabel }) {
     setPhase('working'); setErr('');
     try {
       const base = 'main';
-      const head = `architect/${slugify(title).slice(0, 40) || 'update'}`;
-      setProg({ label: `Creating branch ${head}`, v: 10 });
-      await createBranch(g.repo, head, base).catch((e) => { if (!/exists/i.test(e.message || '')) throw e; });
+      const cur = g.branch && g.branch !== base ? g.branch : null; // already on a feature branch → open the PR from it
+      const head = cur || `architect/${slugify(title).slice(0, 40) || 'update'}`;
+      setProg({ label: cur ? `Using branch ${head}` : `Creating branch ${head}`, v: 10 });
+      if (!cur) await createBranch(g.repo, head, base).catch((e) => { if (!/exists/i.test(e.message || '')) throw e; });
       const files = changes.filter((c) => c.status !== 'deleted').map((c) => ({ path: c.path, content: generateFiles(getProject(projectId)).find((f) => f.path === c.path)?.content || '' }));
       await pushFiles(g.repo, files, title, head, (d, t, path) => setProg({ label: `Pushing ${path}`, v: 10 + (d / t) * 70 }));
       setProg({ label: 'Opening pull request', v: 90 });
@@ -42,11 +43,11 @@ function PRDialog({ close, projectId, changes, baseLabel }) {
   }
   if (phase === 'done' && pr) {
     return html`<${Modal} title=${`Pull request #${pr.number} opened`} subtitle=${`${pr.head} → ${pr.base} · +${pr.add} −${pr.del}`} icon="git-pull-request" onClose=${() => close(true)}
-      footer=${html`<${Button} variant="ghost" onClick=${() => close(true)}>Done<//><${Button} variant="primary" icon="external-link" href=${pr.url} target="_blank" rel="noopener">Open on GitHub<//>`}>
+      footer=${html`<${Button} variant="ghost" onClick=${() => close(true)}>Done<//><${Button} variant="primary" icon="external-link" href=${pr.real ? pr.url : undefined} target="_blank" rel="noopener" onClick=${simLinkClick(pr.real, `Pull request #${pr.number}`)}>Open on GitHub<//>`}>
       <div class="cd-ci">
         <div class="row gap-8 mb-4"><span class="t-sm t-strong grow">Checks</span>${!pr.real ? html`<${Badge} size="sm" tone="neutral" icon="flask">CI simulated<//>` : null}</div>
         ${CI.map((c, i) => html`<div class="cd-ci__row" key=${c}>${ci[i] === 'passed' ? html`<span class="t-green"><${Icon} name="check-circle" size=${15} /></span>` : ci[i] === 'running' ? html`<span class="spinner spinner--sm spinner--amber"></span>` : html`<span class="t-faint"><${Icon} name="circle-dashed" size=${15} /></span>`}<span class="grow">${c}</span><span class="t-xs t-faint">${ci[i] === 'passed' ? 'Passed' : ci[i] === 'running' ? 'Running…' : 'Queued'}</span></div>`)}
-        <a class="link t-sm t-truncate" href=${pr.url} target="_blank" rel="noopener">${pr.url}</a>
+        <a class="link t-sm t-truncate" href=${pr.url} target="_blank" rel="noopener" onClick=${simLinkClick(pr.real, `Pull request #${pr.number}`)}>${pr.url}</a>
       </div>
     <//>`;
   }
@@ -102,7 +103,7 @@ export function Review({ project }) {
       <${SimBadge} />
       <${Button} variant="primary" icon="git-pull-request" disabled=${!changes.length} onClick=${openPR}>Create pull request<//>
     </div>
-    ${g.prs?.length ? html`<div class="cd-prs">${g.prs.slice(0, 3).map((pr) => html`<a class="cd-pr" href=${pr.url} target="_blank" rel="noopener" key=${pr.number}><${Icon} name="git-pull-request" size=${13} /><span class="t-truncate">#${pr.number} ${pr.title}</span><span class="t-faint t-xs">${timeAgo(pr.at)}</span></a>`)}</div>` : null}
+    ${g.prs?.length ? html`<div class="cd-prs">${g.prs.slice(0, 3).map((pr) => html`<a class="cd-pr" href=${pr.url} target="_blank" rel="noopener" key=${pr.number} onClick=${simLinkClick(pr.real, `Pull request #${pr.number}`)}><${Icon} name="git-pull-request" size=${13} /><span class="t-truncate">#${pr.number} ${pr.title}</span><span class="t-faint t-xs">${timeAgo(pr.at)}</span></a>`)}</div>` : null}
     ${!changes.length ? html`<${Empty} icon="git-commit" title="No changes" body=${base ? `The code matches “${base.label}”. Edit a file or ask Architect for a change, then come back.` : 'Nothing to compare yet.'} />` : html`<div class="cd-review__body">
       <nav class="cd-review__files">
         ${changes.map((c) => html`<a key=${c.path} class="cd-review__file" href=${`#d-${c.path}`} onClick=${(e) => { e.preventDefault(); document.getElementById(`d-${c.path}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>

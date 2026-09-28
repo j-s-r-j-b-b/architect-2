@@ -35,8 +35,8 @@ export const RECRUITING = {
   hints: {},
   name: (low, q) => (/screen/.test(low) ? 'Candidate Screener' : q ? `${q} Hiring` : 'Hire Desk'),
   icon: 'users', preset: 'grape', entity: ['candidate', 'candidates'], team: 'hiring team', teamSize: '3–8 people',
-  sources: ['gmail', 'gdrive', 'gsheets', 'builtin'], sourceText: 'Where do resumes arrive today?', sourceWhy: 'Resume Screener reads new applications from here.',
-  sourceLabels: { gmail: 'A shared inbox (Gmail)', gdrive: 'A Google Drive folder', gsheets: 'A spreadsheet of applicants', builtin: 'An application form in this app' },
+  sources: ['gmail', 'greenhouse', 'lever', 'gdrive', 'gsheets', 'builtin'], sourceText: 'Where do resumes arrive today?', sourceWhy: 'Resume Screener reads new applications from here.',
+  sourceLabels: { greenhouse: 'Greenhouse (ATS)', lever: 'Lever (ATS)', gmail: 'A shared inbox (Gmail)', gdrive: 'A Google Drive folder', gsheets: 'A spreadsheet of applicants', builtin: 'An application form in this app' },
   usersRec: 'team',
   autonomy: { text: 'Should interview invites go out automatically?', ask: 'Suggest times — I confirm each invite', auto: 'Book and send invites automatically', decision: 'Interview invites', askA: 'Suggested only — a recruiter confirms every invite', autoA: 'Booked and sent automatically for the shortlist' },
   domainQ: { id: 'q_rank', text: 'How should candidates be ranked?', why: 'This becomes Resume Screener’s rubric. Names, photos and ages are always hidden from it.', options: [['skills', 'Skills match to the job description'], ['experience', 'Experience & seniority'], ['rubric', 'Our own scoring rubric (upload later)']], rec: 'skills', decision: 'Ranking rule' },
@@ -106,7 +106,7 @@ export const RECRUITING = {
     const screens = [
       screen('s_candidates', '/candidates', 'Candidates', 'users', [
         B.header('b_cand_header', '/candidates', 'Candidates', `Ranked by Resume Screener · ${roles.map((x) => x[1]).join(', ')}`, [['Upload resumes', 'secondary', 'upload'], ['Add role', 'primary', 'plus']], { promise: 'P1' }),
-        B.kpis('b_cand_kpis', [K('New applications', cands.filter((x) => now - x.applied < 3 * D).length, 'last 3 days', 'up', 'user-plus'), K('Shortlisted', short.length, 'match ≥ 80', 'flat', 'star'), K('Average match', Math.round(avg(cands.map((x) => x.score))), `across ${roles.length} role${roles.length > 1 ? 's' : ''}`, 'flat', 'gauge'), K('Time to shortlist', `${r.int(1, 3)} days`, `−${r.int(3, 9)} days`, 'up', 'clock')], { table: 'candidates', promise: 'P5', file: 'components/CandidateKpis.tsx' }),
+        B.kpis('b_cand_kpis', [K('New applications', cands.filter((x) => now - x.applied < 3 * D).length, 'last 3 days', 'up', 'user-plus'), K('Shortlisted', short.length, 'in interview pipeline', 'flat', 'star'), K('Average match', Math.round(avg(cands.map((x) => x.score))), `across ${roles.length} role${roles.length > 1 ? 's' : ''}`, 'flat', 'gauge'), K('Time to shortlist', `${r.int(1, 3)} days`, `−${r.int(3, 9)} days`, 'up', 'clock')], { table: 'candidates', promise: 'P5', file: 'components/CandidateKpis.tsx' }),
         B.table('b_cand_table', 'candidates', { title: 'Ranked candidates', file: 'components/CandidateTable.tsx', promise: 'P1', agent: scr, columns: ['name', 'role', 'score', 'stage', 'years', 'location', 'source'], filters: ['role', 'stage'], rowAction: { label: 'Invite to interview', agent: sch } }),
         B.chat('b_cand_chat', lead, { title: `Ask ${c.name}`, file: 'components/AskHiring.tsx', promise: 'P2', greeting: 'Ask me who to interview, why someone ranked where they did, or to schedule a slot.', placeholder: 'Ask about candidates…', suggestions: ['Who should we interview this week?', `Why is ${cands[0].name} ranked first?`, `Compare the top 3 for ${roles[0][1]}`] }),
         B.chart('b_cand_stage', { title: 'Candidates by stage', table: 'candidates', kind: 'bar', groupBy: 'stage', promise: 'P5', file: 'components/StageChart.tsx' }),

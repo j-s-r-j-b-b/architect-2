@@ -35,6 +35,21 @@ const EXTRA = {
   developers: { icon: 'code', title: 'Your stack, your review', points: ['Import any GitHub repo — or push to a new one', 'Every change is a diff you can review as a pull request', 'CLI, REST API and an MCP server for your editor'] },
 };
 
+// What a developer's first ten minutes look like — concrete, not a claim.
+const P = html`<span class="pb-term__p">$ </span>`;
+const DEV_TERMINAL = html`<div class="pb-term" aria-label="Example developer session">
+  <div class="pb-term__bar"><span class="pb-term__dot"></span><span class="pb-term__dot"></span><span class="pb-term__dot"></span><span>~/acme-helpdesk</span></div>
+  <div class="pb-term__body">
+    <div>${P}architect import github.com/acme/helpdesk</div>
+    <div><span class="pb-term__ok">✓ Understanding Report</span><span class="pb-term__c">${'  '}Next.js · 142 files · 2 secrets to fill</span></div>
+    <div>${P}architect agent add triage --framework langgraph</div>
+    <div><span class="pb-term__ok">✓ agents/triage/graph.py</span><span class="pb-term__c">${'  '}evals 12/12 passed · ≈ 7 cr</span></div>
+    <div>${P}architect push --pr</div>
+    <div><span class="pb-term__to">→ PR #42 opened</span><span class="pb-term__c">${'  '}feat/triage-agent · checkpoint saved</span></div>
+    <div class="pb-term__c mt-8"># or drive it from your editor: <span style="color:var(--text)">architect mcp serve</span></div>
+  </div>
+</div>`;
+
 export default function Persona({ params }) {
   const id = params.persona;
   const p = PERSONAS[id];
@@ -65,6 +80,7 @@ export default function Persona({ params }) {
         <div>
           <div class="pb-eyebrow"><${Icon} name=${extra.icon} size=${13} />For ${p.label}</div>
           <h2 class="pb-h2 mt-12">${extra.title}</h2>
+          ${id === 'developers' ? DEV_TERMINAL : null}
         </div>
         <ul class="pb-checks">${extra.points.map((x) => html`<li><span class="pb-checks__icon"><${Icon} name="check" size=${13} stroke=${2.6} /></span>${x}</li>`)}</ul>
       </div>

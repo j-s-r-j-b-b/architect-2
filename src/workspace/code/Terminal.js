@@ -62,7 +62,7 @@ export function Terminal({ project, files, onOpenFile }) {
           await sleep(220);
           const ok = p.status === 'verified' || p.status === 'live';
           ok ? pass++ : fail++;
-          print(`${ok ? '  ✓' : '  ✗'} ${p.id} ${p.title} (${(p.checks || []).length} checks)`, ok ? 'ok' : 'err');
+          print(`${ok ? '  ✓' : '  ✗'} ${p.id} ${p.title} (${(p.checks || []).length} check${(p.checks || []).length === 1 ? '' : 's'})`, ok ? 'ok' : 'err');
           if (!ok) print(`      ${p.status === 'failed' ? 'Assertion failed' : 'Not built yet'}: ${(p.checks || [])[0] || 'no checks'}`, 'dim');
         }
         print(['', `  ${pass} passed${fail ? `, ${fail} failed` : ''} (${(ps.length * 0.8 + 1.2).toFixed(1)}s)`], fail ? 'err' : 'ok');

@@ -67,7 +67,13 @@ export function rich(text = '') {
       if (part.startsWith('`') && part.endsWith('`')) return html`<code class="ws-code-inline">${part.slice(1, -1)}</code>`;
       return part;
     });
-    return li < lines.length - 1 ? html`${nodes}<br />` : nodes;
+    if (/^\s*[-•]\s+/.test(line)) {
+      const first = nodes[0];
+      if (typeof first === 'string') nodes[0] = first.replace(/^\s*[-•]\s+/, '');
+      return html`<span class="ws-bullet">${nodes}</span>`;
+    }
+    const next = lines[li + 1];
+    return li < lines.length - 1 && !/^\s*[-•]\s+/.test(next || '') ? html`${nodes}<br />` : nodes;
   });
 }
 

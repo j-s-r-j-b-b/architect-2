@@ -5,6 +5,7 @@ import { connections } from '../../lib/store.js';
 import { Button, Badge, Icon, Segmented, CodeBlock, CopyButton, Callout, Switch, Slider, Progress, toast } from '../../ui/index.js';
 import { openConnectSheet } from '../../shells/ConnectSheet.js';
 import { stageEdit } from './state.js';
+import { sampleInputFor } from './sample.js';
 import { estCostPerRun, fmtUsd, toolConnection } from './model.js';
 
 const CHANNELS = [
@@ -34,7 +35,7 @@ export function AgentDeploy({ project, agent, onPublish }) {
   const key = fakeKey(agent);
   const shown = reveal ? key : `ak_test_${'•'.repeat(12)}${key.slice(-4)}`;
   const mcpUrl = `https://mcp.architect.space/${slug}/${agent.id}`;
-  const input = (agent.outputs || []).some((o) => o.key === 'score') ? 'New lead: Priya Raman, Northwind Health, 420 employees' : 'What can you do?';
+  const input = sampleInputFor(project, agent).replace(/"/g, "'");
   const snippets = {
     curl: `curl ${endpoint} \\\n  -H "Authorization: Bearer $ARCHITECT_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"input": "${input}", "stream": false}'`,
     js: `const res = await fetch("${endpoint}", {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.ARCHITECT_KEY}\`,\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify({ input: "${input}" }),\n});\nconst { output, trace_url } = await res.json();\n// output → { ${(agent.outputs || []).map((o) => o.key).join(', ') || 'answer'} }`,
@@ -65,6 +66,10 @@ export function AgentDeploy({ project, agent, onPublish }) {
   const [perDay, setPerDay] = useState(defaultRate);
   const monthly = perDay * est * 30;
   const budget = agent.limits?.monthlyBudget;
+  // Log scale so 5, 50 and 500 runs a day are all easy to reach on the same slider.
+  const LOGMAX = Math.log10(2000);
+  const toPos = (n) => Math.round((Math.log10(Math.max(1, n)) / LOGMAX) * 100);
+  const fromPos = (p) => { const v = Math.pow(10, (p / 100) * LOGMAX); return v < 20 ? Math.round(v) : v < 200 ? Math.round(v / 5) * 5 : Math.round(v / 50) * 50; };
   const pct = budget ? Math.min(100, Math.round((monthly / budget) * 100)) : 0;
 
   return html`<div class="ag-pane">
@@ -97,7 +102,8 @@ export function AgentDeploy({ project, agent, onPublish }) {
       <//>
       <${Block} icon="coins" title="Run-rate forecast" sub="What it would cost at your expected volume.">
         <div class="row gap-8"><span class="t-sm">Runs per day</span><span class="grow"></span><span class="t-mono t-strong">${perDay}</span></div>
-        <${Slider} min=${1} max=${2000} value=${perDay} onChange=${setPerDay} aria-label="Runs per day" />
+        <${Slider} min=${0} max=${100} value=${toPos(perDay)} onChange=${(p) => setPerDay(fromPos(+p))} aria-label="Runs per day" />
+        <div class="row gap-6 wrap">${[10, 100, 1000].map((n) => html`<button type="button" class=${cx('chip chip--sm', perDay === n && 'is-active')} onClick=${() => setPerDay(n)}>${n.toLocaleString()} a day</button>`)}<span class="t-xs t-faint">Scale is logarithmic — 1 to 2,000 a day</span></div>
         <div class="ag-forecast">
           <div><div class="t-xs t-faint">Per run</div><div class="t-strong t-mono">${fmtUsd(est)}</div></div>
           <span class="t-faint">×</span>

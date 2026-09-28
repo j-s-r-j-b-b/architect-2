@@ -14,6 +14,11 @@ function useActionHandler(block, screen) {
     if (form && /add|new|create|submit|request|book|apply/.test(label)) { ctx.scrollToBlock(form.id); return; }
     const chat = screen?.blocks.find((b) => b.type === 'agentChat');
     if (chat && /ask|chat|help/.test(label)) { ctx.scrollToBlock(chat.id); return; }
+    // CSV in/out: honest, specific feedback instead of a dead end
+    const tb = screen?.blocks.find((b) => b.type === 'table' && b.bind?.table);
+    const tbl = tb ? tableById(ctx.project, tb.bind.table) : null;
+    if (tbl && /export|download/.test(label)) { ctx.notify(`Exported ${tbl.rows.length} ${tbl.name.toLowerCase()} to ${tbl.name.toLowerCase().replace(/\W+/g, '-')}.csv${ctx.live ? '' : ' (simulated in the preview)'}.`, 'info'); return; }
+    if (tbl && /import|upload|csv/.test(label)) { ctx.notify(`CSV import opens a file picker and matches your columns to ${tbl.name}${ctx.live ? '.' : '. Simulated in the preview: no file is read.'}`, 'info'); return; }
     ctx.notify(ctx.live ? `“${a.label}” is coming soon.` : `“${a.label}” isn’t wired to anything yet — ask Architect to hook it up.`, 'info');
   };
 }

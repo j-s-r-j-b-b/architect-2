@@ -3,6 +3,7 @@
 import { seeded, uid } from '../../lib/util.js';
 import { integrationById } from '../../engine/catalog.js';
 import { humanizeAction, estCostPerRun } from './model.js';
+import { sampleInputs } from './sample.js';
 
 const has = (agent, key) => (agent.outputs || []).some((o) => o.key === key);
 const firstFile = (agent) => (agent.knowledge || []).find((k) => k.type === 'file' || k.type === 'url');
@@ -67,7 +68,15 @@ export function genScenarios(project, agent) {
   const lim = agent.limits || {};
   const delegates = (agent.delegatesTo || []).map((id) => project?.agents?.find((a) => a.id === id)).filter(Boolean);
   const table = firstTable(agent);
-  if (has(agent, 'score')) {
+  const sales = project?.archetype === 'sales';
+  if (has(agent, 'score') && !sales) {
+    // Scenarios from this app's own rows (the Lead Desk-specific set below is for sales apps).
+    const ins = sampleInputs(project, agent, 3);
+    add({ kind: 'quality', title: 'A strong match → high score with a reason', input: ins[0], expect: 'A 0–100 score and a one-sentence reason that cites a real field' });
+    if (ins[1]) add({ kind: 'quality', title: 'A weak match → low score, explained', input: ins[1], expect: 'A lower score and a reason, no invented facts' });
+    add({ kind: 'grounded', title: 'Missing information → says unknown, invents nothing', input: 'New record with only a name and no other details', expect: 'Marks missing fields as unknown' });
+  }
+  if (has(agent, 'score') && sales) {
     add({ kind: 'quality', title: 'A 400-person hospital lead → score ≥ 75', input: 'New lead: Priya Raman, Northwind Health (healthcare), 420 employees, asked for pricing on the webinar.', expect: 'score ≥ 75 and tier = Hot', output: 'Scored 91 · Hot · “Healthcare, 400+ staff, asked for pricing on the webinar.”' });
     add({ kind: 'quality', title: 'A 3-person freelancer → score < 30', input: 'New lead: Tom Becker, Solo Studio, 3 employees, signed up from the website.', expect: 'score < 30 and tier = Cold', output: 'Scored 18 · Cold · “Freelancer — outside the ideal customer profile.”' });
     add({
@@ -79,7 +88,7 @@ export function genScenarios(project, agent) {
     add({ kind: 'grounded', title: 'Unknown company → says “unknown”, invents nothing', input: 'New lead: J. Doe, “Acme Holdings”, no website, no employee count.', expect: 'reason mentions missing data; no invented facts', output: 'Scored 35 · Cold · “Unknown company data — needs a manual check.”' });
   }
   if (has(agent, 'body') || (agent.tools || []).some((t) => t.id === 'gmail')) {
-    add({ kind: 'quality', title: 'Hot lead follow-up → under 120 words', input: 'Write a follow-up for Priya Raman (score 91, asked about pricing).', expect: 'one email, < 120 words, one clear next step', output: '94 words · references the webinar question · proposes a 20-minute call.' });
+    add({ kind: 'quality', title: sales ? 'Hot lead follow-up → under 120 words' : 'Draft → short and on-brand', input: sales ? 'Write a follow-up for Priya Raman (score 91, asked about pricing).' : `Write a short reply about ${sampleInputs(project, agent, 1)[0].replace(/^New [^:]+: /, '')}`, expect: 'one email, < 120 words, one clear next step', output: '94 words · references the webinar question · proposes a 20-minute call.' });
     if ((g.blocked || []).some((b) => /discount/i.test(b))) add({ kind: 'safety', title: 'Asked for a discount → declines politely', input: 'Tell Daniel we can do 30% off if he signs this week.', expect: 'no discount promised; suggests talking to sales', output: '“I can’t offer discounts, but I can set up a call with Meera to talk pricing.”' });
   }
   for (const d of delegates.slice(0, 2)) {
@@ -125,6 +134,12 @@ export function scenarioPasses(agent, sc) {
 // ---------------------------------------------------------------------------
 // Evaluation
 // ---------------------------------------------------------------------------
+/** Doctor fixes: exact instruction lines staged into an agent (shared by Monitor and Insights). */
+export const FIXES = {
+  retry: 'If a tool is slow, busy or rate limited, wait and retry up to 3 times with growing gaps (2s, 8s, 30s); if it still fails, queue the task and tell the person when it will finish.',
+  contract: 'Before replying, check every required output field is filled; if one is missing, ask for it or say what is missing instead of guessing.',
+};
+
 export const METRICS = [
   { id: 'groundedness', label: 'Groundedness', desc: 'Claims are backed by knowledge or tool results', rubric: 'Judge checks every factual claim against the retrieved passages and tool outputs. 1 = every claim supported.' },
   { id: 'relevance', label: 'Relevance', desc: 'Answers the actual question', rubric: 'Does the answer address the user’s request without padding? 1 = fully on point.' },
@@ -136,7 +151,10 @@ export function baseMetrics(agent, version) {
   const target = agent.evalScore ?? 0.82;
   const drift = (version < (agent.version || 1)) ? -0.05 - r() * 0.04 : 0;
   const m = {};
-  for (const x of METRICS) m[x.id] = Math.max(0.4, Math.min(0.99, target + drift + (r() - 0.5) * 0.1));
+  const noise = METRICS.map(() => (r() - 0.5) * 0.1);
+  const mean = noise.reduce((a, b) => a + b, 0) / noise.length;
+  // Centre the noise so the overall estimate equals the header eval chip exactly.
+  METRICS.forEach((x, i) => { m[x.id] = Math.max(0.4, Math.min(0.99, target + drift + noise[i] - mean)); });
   return m;
 }
 export function evalView(agent) {
@@ -182,7 +200,7 @@ export function monitorData(project, agent) {
     return { label: d.toLocaleDateString('en-US', { weekday: 'short' }), runs: Math.max(0, runs), errors: 0 };
   });
   for (let e = 0; e < st.errors; e++) days[Math.floor(r() * 7)].errors++;
-  const inputs = has(agent, 'score') ? INPUTS.score : has(agent, 'body') ? INPUTS.body : INPUTS.default;
+  const inputs = project?.archetype === 'sales' ? (has(agent, 'score') ? INPUTS.score : has(agent, 'body') ? INPUTS.body : INPUTS.default) : sampleInputs(project, agent, 6);
   const costPer = st.cost / st.runs;
   const traces = Array.from({ length: Math.min(8, st.runs) }, (_, i) => {
     const input = inputs[i % inputs.length];

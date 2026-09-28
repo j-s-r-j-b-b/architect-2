@@ -9,7 +9,7 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const sentence = (s) => { const x = s.trim().replace(/\s+/g, ' '); return (x.charAt(0).toUpperCase() + x.slice(1)).replace(/([^.!?])$/, '$1.'); };
 
 export const COPILOT_EXAMPLES = {
-  qualifier: ['Also check LinkedIn to find the decision maker', 'Use the faster brain — cost matters more than nuance', 'Run every hour instead, and cap it at $10 a month'],
+  qualifier: ['Also check LinkedIn before deciding', 'Use the faster brain — cost matters more than nuance', 'Run every hour instead, and cap it at $10 a month'],
   email: ['Make the emails shorter and friendlier', 'Never mention pricing in the first email', 'Ask me before creating drafts too'],
   default: ['Ask me before it sends anything', 'Remember what each customer prefers', 'Don’t talk about competitors'],
 };
