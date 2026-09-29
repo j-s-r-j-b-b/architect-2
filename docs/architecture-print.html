@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <base href="/" />
+  <title>Architect 2.0 — Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" />
+  <style>
+    @page { size: A4; margin: 16mm 15mm 18mm; }
+    :root { --ink: #15171C; --muted: #4A4E57; --faint: #767A83; --line: #E6E4DD; --blue: #2F5BEA; --paper: #F6F6F3; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { font-family: "Geist", "Segoe UI", Helvetica, Arial, sans-serif; font-size: 10.5pt; line-height: 1.55; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; padding: 0 6mm; background-image: linear-gradient(rgba(47,91,234,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(47,91,234,.06) 1px, transparent 1px); background-size: 22px 22px; border-radius: 14px; }
+    .cover .mark { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 16pt; }
+    .cover .tag { font-family: "Geist Mono", monospace; font-size: 9pt; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #ECF1FF; color: #1C3AA8; }
+    .cover h1 { font-size: 38pt; line-height: 1.05; letter-spacing: -0.03em; margin: 28mm 0 6mm; }
+    .cover h1 i { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; color: var(--blue); }
+    .cover p { font-size: 12.5pt; color: var(--muted); max-width: 150mm; margin: 0 0 4mm; }
+    .cover .meta { margin-top: 20mm; font-size: 10pt; color: var(--muted); line-height: 1.8; }
+    .cover .meta b { color: var(--ink); }
+    .overview { page-break-after: always; }
+    .overview h2 { margin-top: 0; }
+    .overview img { width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+    h1, h2, h3 { letter-spacing: -0.015em; line-height: 1.2; page-break-after: avoid; }
+    #doc > h1:first-child, #doc > blockquote:first-of-type, #doc > p:has(> img) { display: none; }
+    h2 { font-size: 17pt; margin: 11mm 0 3mm; padding-top: 2mm; border-top: 2px solid var(--ink); }
+    h3 { font-size: 12.5pt; margin: 7mm 0 2mm; }
+    p, li { orphans: 3; widows: 3; }
+    a { color: var(--blue); text-decoration: none; }
+    code { font-family: "Geist Mono", Consolas, monospace; font-size: 8.8pt; background: #F1F0EC; padding: 0.5px 4px; border-radius: 4px; }
+    pre { background: #101318; color: #D7DAE0; padding: 10px 12px; border-radius: 8px; overflow: hidden; white-space: pre-wrap; page-break-inside: avoid; }
+    pre code { background: none; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 9.2pt; page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+    th { text-align: left; background: #F6F6F3; font-weight: 600; }
+    th, td { border: 1px solid var(--line); padding: 5px 7px; vertical-align: top; }
+    td:first-child { white-space: normal; }
+    blockquote { margin: 3mm 0; padding: 2mm 4mm; border-left: 3px solid var(--blue); background: #ECF1FF; color: #1C3AA8; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 6mm 0; }
+    ul, ol { padding-left: 6mm; }
+    .diagram { margin: 4mm 0 5mm; padding: 4mm; border: 1px solid var(--line); border-radius: 10px; background: #FFFFFF; page-break-inside: avoid; text-align: center; }
+    .diagram svg { max-width: 100% !important; height: auto; max-height: 205mm; }
+    .footer-note { margin-top: 10mm; font-size: 8.5pt; color: var(--faint); border-top: 1px solid var(--line); padding-top: 3mm; }
+    @media screen { body { max-width: 210mm; margin: 0 auto; padding: 12mm; background: #fff; } }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="mark">
+      <svg width="34" height="34" viewBox="0 0 24 24"><rect width="24" height="24" rx="7" fill="#2F5BEA"/><path d="M7 17.5 12 6l5 11.5" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.2 13.2h5.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+      Architect <span class="tag">2.0</span>
+    </div>
+    <h1>Architecture <i>design</i></h1>
+    <p>How the Architect 2.0 concept prototype is built: layers, modules, the project data model, the core prompt-to-build flow, agents in any framework, the code → GitHub → deploy pipeline, and the path to a production system.</p>
+    <div class="meta">
+      <div><b>Live app:</b> architect-2-gray.vercel.app</div>
+      <div><b>Reviewer guide:</b> architect-2-gray.vercel.app/tour</div>
+      <div><b>Repository:</b> github.com/j-s-r-j-b-b/architect-2</div>
+      <div><b>Author:</b> Shivansh Parashar · <span id="date"></span></div>
+    </div>
+  </section>
+
+  <section class="overview">
+    <h2>System overview</h2>
+    <img src="docs/architecture.svg" alt="Architect 2.0 system architecture" />
+  </section>
+
+  <main id="doc"><p>Loading…</p></main>
+  <div class="footer-note">Generated from ARCHITECTURE.md in the repository. Diagrams are rendered from the Mermaid sources in that file.</div>
+
+  <script type="module">
+    import { marked } from 'https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.esm.js';
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    document.getElementById('date').textContent = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', fontFamily: 'Geist, Segoe UI, sans-serif', flowchart: { htmlLabels: true, curve: 'basis' } });
+    const md = await (await fetch('ARCHITECTURE.md', { cache: 'no-store' })).text();
+    const doc = document.getElementById('doc');
+    doc.innerHTML = marked.parse(md);
+    const blocks = [...doc.querySelectorAll('pre > code.language-mermaid')];
+    for (const [i, code] of blocks.entries()) {
+      const { svg } = await mermaid.render(`mmd${i}`, code.textContent);
+      const wrap = document.createElement('div');
+      wrap.className = 'diagram';
+      wrap.innerHTML = svg;
+      code.parentElement.replaceWith(wrap);
+    }
+    await document.fonts.ready;
+    document.title = 'Architect 2.0 — Architecture';
+    window.__ready = true;
+  </script>
+</body>
+</html>
