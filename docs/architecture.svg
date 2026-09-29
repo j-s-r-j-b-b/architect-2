@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 820" width="1280" height="820" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#6B7280"/></marker>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#2F5BEA" stroke-opacity=".06"/></pattern>
+  </defs>
+  <rect width="1280" height="820" fill="#F6F6F3"/>
+  <rect width="1280" height="820" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="40" y="52" font-size="26" font-weight="700" fill="#15171C">Architect 2.0 — system architecture</text>
+  <text x="40" y="78" font-size="14" fill="#4A4E57">Static single-page app (Preact + htm + signals, no build step) · optional Firebase for real sign-in &amp; database · optional GitHub API · hosted on Vercel</text>
+
+  <!-- Users -->
+  <g>
+    <rect x="40" y="100" width="1200" height="58" rx="12" fill="#FFFFFF" stroke="#D4D1C8"/>
+    <text x="60" y="126" font-size="13" font-weight="700" fill="#15171C">PEOPLE</text>
+    <text x="60" y="146" font-size="13" fill="#4A4E57">Non-technical builders (plan, price, watch it build, click to change)  ·  Developers (import repos, diffs &amp; PRs, any-framework agents, API/MCP)  ·  End users of published apps  ·  Reviewers (guided tour)</text>
+  </g>
+  <path d="M640 158v22" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Browser SPA container -->
+  <rect x="40" y="184" width="1200" height="444" rx="16" fill="#FFFFFF" stroke="#2F5BEA" stroke-width="1.5"/>
+  <text x="60" y="210" font-size="13" font-weight="700" fill="#1C3AA8">BROWSER — ARCHITECT 2.0 SPA</text>
+  <text x="330" y="210" font-size="12" fill="#767A83">ES modules via import map · lazy-loaded routes · ~185 files · ~23.5k lines JS · ~4.4k lines CSS</text>
+
+  <!-- Row 1: shells / workspace -->
+  <g font-size="12">
+    <rect x="60" y="224" width="360" height="130" rx="10" fill="#ECF1FF" stroke="#BFCFFF"/>
+    <text x="76" y="246" font-size="13" font-weight="700" fill="#1C3AA8">Shells &amp; pages</text>
+    <text x="76" y="268" fill="#15171C">Public: landing, pricing, templates,</text>
+    <text x="76" y="286" fill="#15171C">marketplace, enterprise, persona pages</text>
+    <text x="76" y="304" fill="#15171C">App: start, consultant, import, projects,</text>
+    <text x="76" y="322" fill="#15171C">connections, usage, billing, settings, admin</text>
+    <text x="76" y="340" fill="#15171C">Auth · live apps /a/:slug · reviewer guide</text>
+
+    <rect x="440" y="224" width="780" height="130" rx="10" fill="#F1ECFE" stroke="#D3C4FB"/>
+    <text x="456" y="246" font-size="13" font-weight="700" fill="#5230B8">Project workspace  /p/:id/:tab</text>
+    <text x="456" y="268" fill="#15171C">Top bar (status chips, Share, GitHub, credits, Publish) · Chat dock (cards: questions, plan, scope, quote, progress,</text>
+    <text x="456" y="286" fill="#15171C">receipt, Doctor fix, approval, change) · Composer (Ask / Plan / Build, @mentions, model tier, run mode) · Run bar</text>
+    <text x="456" y="304" fill="#15171C">Tabs: Plan · App (preview, Select / Edit / Annotate / X-ray) · Agents · Data · Code (+ Review) · Launch · Insights</text>
+    <text x="456" y="322" fill="#15171C">Drawers: History (checkpoints) · Connections &amp; secrets · Comments · Logs</text>
+    <text x="456" y="340" fill="#15171C">Workspace bus (signals) lets tabs talk to the composer, drawers and preview without importing each other</text>
+  </g>
+
+  <!-- Row 2: engine + renderer -->
+  <g font-size="12">
+    <rect x="60" y="370" width="700" height="118" rx="10" fill="#FFF3DC" stroke="#F6D494"/>
+    <text x="76" y="392" font-size="13" font-weight="700" fill="#8A5200">Engine (pure logic)</text>
+    <text x="76" y="414" fill="#15171C">generate.js + gen/ — prompt → archetype (15 + generic) → questions → plan: promises, quote,</text>
+    <text x="76" y="432" fill="#15171C">screens, data, agents · intents.js — chat edit → previewable change · quote.js · agentsim.js</text>
+    <text x="76" y="450" fill="#15171C">conversation.js — plan → approve → build → iterate · simulate.js — build/edit runs, credits, checkpoints</text>
+    <text x="76" y="468" fill="#15171C">frameworks.js — one agent spec → 8 frameworks · codegen.js — Next.js source · deploy.js — readiness + publish</text>
+
+    <rect x="780" y="370" width="440" height="118" rx="10" fill="#E3F6EA" stroke="#A9DEBE"/>
+    <text x="796" y="392" font-size="13" font-weight="700" fill="#0B6B35">Generated-app renderer  (genapp/)</text>
+    <text x="796" y="414" fill="#15171C">Renders any project spec as a real SaaS app:</text>
+    <text x="796" y="432" fill="#15171C">15 block types · themes · responsive frames</text>
+    <text x="796" y="450" fill="#15171C">Build states: wireframe → building → done</text>
+    <text x="796" y="468" fill="#15171C">X-ray: element → data · agent · code · promise</text>
+  </g>
+
+  <!-- Row 3: state + design -->
+  <g font-size="12">
+    <rect x="60" y="504" width="700" height="108" rx="10" fill="#EEEDE8" stroke="#D4D1C8"/>
+    <text x="76" y="526" font-size="13" font-weight="700" fill="#15171C">State &amp; services  (lib/)</text>
+    <text x="76" y="548" fill="#15171C">store.js — signals: session, prefs, projects, wallet, inbox, connections · actions: updateProject, addChat,</text>
+    <text x="76" y="566" fill="#15171C">addCheckpoint / restoreCheckpoint, spend, logActivity · debounced saves · router.js (history API, lazy pages)</text>
+    <text x="76" y="584" fill="#15171C">auth.js — Firebase (Google / GitHub / email) or local demo · db.js — Firestore or localStorage adapter</text>
+    <text x="76" y="602" fill="#15171C">github.js — real REST calls with an OAuth token, realistic demo repos otherwise</text>
+
+    <rect x="780" y="504" width="440" height="108" rx="10" fill="#FFFFFF" stroke="#D4D1C8"/>
+    <text x="796" y="526" font-size="13" font-weight="700" fill="#15171C">Design system  (ui/ + styles/)</text>
+    <text x="796" y="548" fill="#15171C">Tokens with light + dark themes</text>
+    <text x="796" y="566" fill="#15171C">Lifecycle colours: planned · building · verified/live</text>
+    <text x="796" y="584" fill="#15171C">problem · AI/agents · deferred/sample</text>
+    <text x="796" y="602" fill="#15171C">UI kit, overlays (modal, drawer, toast), icons</text>
+  </g>
+
+  <!-- arrows inside -->
+  <path d="M410 354v14" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M830 354v14" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M410 488v14" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M760 429h18" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- External -->
+  <text x="40" y="660" font-size="13" font-weight="700" fill="#15171C">EXTERNAL SERVICES</text>
+  <g font-size="12">
+    <rect x="40" y="672" width="228" height="104" rx="10" fill="#FFFFFF" stroke="#D4D1C8"/>
+    <text x="56" y="694" font-size="13" font-weight="700" fill="#15171C">Vercel</text>
+    <text x="56" y="714" fill="#4A4E57">Static hosting, CDN</text>
+    <text x="56" y="732" fill="#4A4E57">SPA rewrite → index.html</text>
+    <text x="56" y="750" fill="#4A4E57">Auto-deploy on git push</text>
+
+    <rect x="282" y="672" width="228" height="104" rx="10" fill="#FFFFFF" stroke="#D4D1C8"/>
+    <text x="298" y="694" font-size="13" font-weight="700" fill="#15171C">jsDelivr CDN</text>
+    <text x="298" y="714" fill="#4A4E57">Preact · hooks · signals · htm</text>
+    <text x="298" y="732" fill="#4A4E57">pinned versions via import map</text>
+    <text x="298" y="750" fill="#4A4E57">Google Fonts (Geist, Serif)</text>
+
+    <rect x="524" y="672" width="228" height="104" rx="10" fill="#FFFFFF" stroke="#2F5BEA" stroke-dasharray="5 4"/>
+    <text x="540" y="694" font-size="13" font-weight="700" fill="#15171C">Firebase (optional)</text>
+    <text x="540" y="714" fill="#4A4E57">Auth: Google, GitHub, email</text>
+    <text x="540" y="732" fill="#4A4E57">Firestore: users/{uid}/projects</text>
+    <text x="540" y="750" fill="#4A4E57">published/{slug} (public read)</text>
+
+    <rect x="766" y="672" width="228" height="104" rx="10" fill="#FFFFFF" stroke="#2F5BEA" stroke-dasharray="5 4"/>
+    <text x="782" y="694" font-size="13" font-weight="700" fill="#15171C">GitHub REST API (optional)</text>
+    <text x="782" y="714" fill="#4A4E57">List/inspect repos (import)</text>
+    <text x="782" y="732" fill="#4A4E57">Create repo, push, branch, PR</text>
+    <text x="782" y="750" fill="#4A4E57">Token via Firebase GitHub OAuth</text>
+
+    <rect x="1008" y="672" width="232" height="104" rx="10" fill="#FFFFFF" stroke="#D4D1C8"/>
+    <text x="1024" y="694" font-size="13" font-weight="700" fill="#15171C">Browser storage</text>
+    <text x="1024" y="714" fill="#4A4E57">localStorage: demo-mode data</text>
+    <text x="1024" y="732" fill="#4A4E57">sessionStorage: GitHub token,</text>
+    <text x="1024" y="750" fill="#4A4E57">?sandbox= per-tab namespace</text>
+  </g>
+  <path d="M640 628v40" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="652" y="652" font-size="11" fill="#767A83">dashed = used only when configured / connected</text>
+  <text x="40" y="806" font-size="11" fill="#767A83">github.com/j-s-r-j-b-b/architect-2 · live: architect-2-gray.vercel.app</text>
+</svg>
